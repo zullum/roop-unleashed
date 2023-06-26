@@ -1,33 +1,56 @@
-Take a video and replace the face in it with a face of your choice. You only need one image of the desired face. No dataset, no training.
+# roop-unleashed
 
-You can watch some demos [here](https://drive.google.com/drive/folders/1KHv8n_rd3Lcr2v7jBq1yPSTWM554Gq8e?usp=sharing). A StableDiffusion extension is also available, [here](https://github.com/s0md3v/sd-webui-roop).
+[Changelog](#changelog) • [Installation](#installation) • [Usage](#usage) • [Example](#example-input) • [FAQ](#faq)
 
-![demo-gif](demo.gif)
+
+Uncensored face-swapping for images and videos without training with an easy-to-use GUI.  
+Based on [roop](https://github.com/s0md3v/roop)
+
+### Additional Features
+
+- Uncensored
+- Better GUI
+- Selecting of specific faces in source/target possible
+- Dynamic face enhancement toggle
 
 ## Disclaimer
+
 This software is meant to be a productive contribution to the rapidly growing AI-generated media industry. It will help artists with tasks such as animating a custom character or using the character as a model for clothing etc.
 
-The developers of this software are aware of its possible unethical applicaitons and are committed to take preventative measures against them. It has a built-in check which prevents the program from working on inappropriate media including but not limited to nudity, graphic content, sensitive material such as war footage etc. We will continue to develop this project in the positive direction while adhering to law and ethics. This project may be shut down or include watermarks on the output if requested by law.
+Users of this software are expected to use this software responsibly while abiding the local law. If a face of a real person is being used, users are suggested to get consent from the concerned person and clearly mention that it is a deepfake when posting content online. Developers of this software will not be responsible for actions of end-users.
 
-Users of this software are expected to use this software responsibly while abiding the local law. If face of a real person is being used, users are suggested to get consent from the concerned person and clearly mention that it is a deepfake when posting content online. Developers of this software will not be responsible for actions of end-users.
 
-## How do I install it?
+### Installation
 
-**Issues regarding installation will be closed from now on, we cannot handle the amount of requests.**
+For Windows, just use the 1-click installer in releases. This will download and install everything
+in a handy conda environment. This not only installs the application but also runs it, once installed.
+To enable your GPU however, you need to add the commandline argument to your windows_run.bat e.g.
 
-- **Basic:** It is more likely to work on your computer but it will also be very slow. You can follow instructions for the basic install [here](https://github.com/s0md3v/roop/wiki/1.-Installation).
+> REM Please set the following commandline arguments to your prefered settings
+set COMMANDLINE_ARGS=--execution-provider cuda --frame-processor face_swapper face_enhancer --video-encoder libvpx-vp9
 
-- **Acceleration:** If you have a good GPU and are ready for solving any software issues you may face, you can enable GPU which is wayyy faster. To do this, first follow the basic install instructions given above and then follow GPU-specific instructions [here](https://github.com/s0md3v/roop/wiki/2.-Acceleration).
+This would set acceleration to NVIDIA Cuda, enable swapping and enhancements and use the latest video encoder. Please look below for an overview of possible commandline arguments.
 
-## How do I use it?
-> Note: When you run this program for the first time, it will download some models ~300MB in size.
+ 
 
-Executing `python run.py` command will launch this window:
-![gui-demo](gui-demo.png)
+For other OS or if you'd rather like to do this by yourself then:
 
-Choose a face (image with desired face) and the target image/video (image/video in which you want to replace the face) and click on `Start`. Open file explorer and navigate to the directory you select your output to be in. You will find a directory named `<video_title>` where you can see the frames being swapped in realtime. Once the processing is done, it will create the output file. That's it.
+- `git clone https://github.com/C0untFloyd/roop-unleashed`
+- `pip install -r requirements.txt`
 
-Additional command line arguments are given below. To learn out what they do, check [this guide](https://github.com/s0md3v/roop/wiki/Advanced-Options).
+Depending on your system and available GPU there are different packages you need to install and different commandline args. Here are the instructions from the original roop page:
+
+[Using GPU Acceleration](https://github.com/s0md3v/roop/wiki/2.-Acceleration)
+
+For Video face-swapping you also need to have ffmpeg properly installed (having it in your PATH Env). The windows installer tries to do this automatically.  
+
+
+### Usage
+
+- Run the `windows_run.bat` from the Installer. Edit the .bat file to add your desired commandline arguments 
+- Linux `python run.py (and optional commandline arguments)`
+
+Additional command line arguments are given below. To find out what they do, check [this guide](https://github.com/s0md3v/roop/wiki/Advanced-Options).
 
 ```
 options:
@@ -50,8 +73,33 @@ options:
 
 Looking for a CLI mode? Using the -s/--source argument will make the run program in cli mode.
 
-## Credits
-- [henryruhs](https://github.com/henryruhs): for being an irreplaceable contributor to the project
-- [ffmpeg](https://ffmpeg.org/): for making video related operations easy
-- [deepinsight](https://github.com/deepinsight): for their [insightface](https://github.com/deepinsight/insightface) project which provided a well-made library and models.
-- and all developers behind libraries used in this project.
+> Note: When you run this program for the first time, it will download some models ~300MB in size.
+
+
+### Example
+
+Let's assume we want to swap the faces in this image
+![originalimage](docs/kickboxing.jpg)
+to the faces of a person looking like Elon Musk and a person looking similar to Zuckerberg.
+Selecting a source image with a face of Musk and using the originalimage from above as target, there will be a face-selection dialogue, looking like this:
+![face-selection](docs/faceselection.png)
+
+After clicking on the face of your choice, this will be remembered and clicking on Start, specifying the output filename will begin the swapping process.  
+When this is finished you view the resulting image/video by clicking on Show Result.
+
+After additionally swapping a face looking like Zuckerberg onto the right dude, my final result looks like this:
+
+![finalimage](docs/finaloutput.png)
+
+It's almost the same procedure with videos but for the face selection you need to specify the frame number where your target face is visible (default: 1).
+
+
+Image Credits: Alamy, Wikipedia, Imago
+
+### FAQ
+
+### Changelog
+
+**24.06.2023** Initial Public Release 1.1.0
+
+

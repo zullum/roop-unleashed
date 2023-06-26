@@ -20,7 +20,7 @@ import tensorflow
 import roop.globals
 import roop.metadata
 import roop.ui as ui
-from roop.predicter import predict_image, predict_video
+#from roop.predicter import predict_image, predict_video
 from roop.processors.frame.core import get_frame_processors_modules
 from roop.utilities import has_image_extension, is_image, is_video, detect_fps, create_video, extract_frames, get_temp_frame_paths, restore_audio, create_temp, move_temp, clean_temp, normalize_output_path
 
@@ -124,9 +124,9 @@ def pre_check() -> bool:
     if sys.version_info < (3, 9):
         update_status('Python version is not supported - please upgrade to 3.9 or higher.')
         return False
-    if not shutil.which('ffmpeg'):
-        update_status('ffmpeg is not installed.')
-        return False
+    #if not shutil.which('ffmpeg'):
+    #    update_status('ffmpeg is not installed.')
+    #    return False
     return True
 
 
@@ -136,18 +136,26 @@ def update_status(message: str, scope: str = 'ROOP.CORE') -> None:
         ui.update_status(message)
 
 
+
 def start() -> None:
     for frame_processor in get_frame_processors_modules(roop.globals.frame_processors):
         if not frame_processor.pre_start():
             return
     # process image to image
     if has_image_extension(roop.globals.target_path):
-        if predict_image(roop.globals.target_path):
-            destroy()
-        shutil.copy2(roop.globals.target_path, roop.globals.output_path)
+
+        #if predict_image(roop.globals.target_path) > 0.85:
+        #    destroy()
+        # todo: this needs a temp path for images to work with multiple frame processors
         for frame_processor in get_frame_processors_modules(roop.globals.frame_processors):
-            update_status('Progressing...', frame_processor.NAME)
-            frame_processor.process_image(roop.globals.source_path, roop.globals.output_path, roop.globals.output_path)
+            target = roop.globals.target_path
+            if frame_processor.NAME == 'ROOP.FACE-ENHANCER':
+                if not roop.globals.post_enhance:
+                    continue
+                target = roop.globals.output_path
+
+            update_status(f'{frame_processor.NAME} in progress...')
+            frame_processor.process_image(ui.SELECTED_FACE_DATA_INPUT, ui.SELECTED_FACE_DATA_OUTPUT, target, roop.globals.output_path)
             frame_processor.post_process()
             release_resources()
         if is_image(roop.globals.target_path):
@@ -156,16 +164,20 @@ def start() -> None:
             update_status('Processing to image failed!')
         return
     # process image to videos
-    if predict_video(roop.globals.target_path):
-        destroy()
+    #seconds, probabilities = predict_video_frames(video_path=roop.globals.target_path, frame_interval=100)
+    #if any(probability > 0.85 for probability in probabilities):
+    #    destroy()
     update_status('Creating temp resources...')
     create_temp(roop.globals.target_path)
     update_status('Extracting frames...')
     extract_frames(roop.globals.target_path)
     temp_frame_paths = get_temp_frame_paths(roop.globals.target_path)
     for frame_processor in get_frame_processors_modules(roop.globals.frame_processors):
-        update_status('Progressing...', frame_processor.NAME)
-        frame_processor.process_video(roop.globals.source_path, temp_frame_paths)
+        if frame_processor.NAME == 'ROOP.FACE-ENHANCER' and not roop.globals.post_enhance:
+            continue
+
+        update_status(f'{frame_processor.NAME} in progress...')
+        frame_processor.process_video(ui.SELECTED_FACE_DATA_INPUT, ui.SELECTED_FACE_DATA_OUTPUT, temp_frame_paths)
         frame_processor.post_process()
         release_resources()
     # handles fps

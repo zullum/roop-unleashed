@@ -1,4 +1,7 @@
+.vs
 .idea
 models
 temp
 __pycache__
+*.pth
+/start.bat
