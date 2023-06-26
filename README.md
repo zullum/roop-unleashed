@@ -22,16 +22,11 @@ Users of this software are expected to use this software responsibly while abidi
 
 ### Installation
 
-For Windows, just use the 1-click installer in releases. This will download and install everything
+> For Windows, you need to download and install [Visual Studio](https://visualstudio.microsoft.com/de/downloads/) (in theory build-tools might work too but in my experience so far they don't). During the install, make sure to at least include the C++ package and perhaps Python as well.
+
+Besides that, just use the 1-click installer in releases. This will download and install everything
 in a handy conda environment. This not only installs the application but also runs it, once installed.
-To enable your GPU however, you need to add the commandline argument to your windows_run.bat e.g.
 
-> REM Please set the following commandline arguments to your prefered settings
-set COMMANDLINE_ARGS=--execution-provider cuda --frame-processor face_swapper face_enhancer --video-encoder libvpx-vp9
-
-This would set acceleration to NVIDIA Cuda, enable swapping and enhancements and use the latest video encoder. Please look below for an overview of possible commandline arguments.
-
- 
 
 For other OS or if you'd rather like to do this by yourself then:
 
@@ -45,10 +40,19 @@ Depending on your system and available GPU there are different packages you need
 For Video face-swapping you also need to have ffmpeg properly installed (having it in your PATH Env). The windows installer tries to do this automatically.  
 
 
+To enable usage of your GPU however, you need to add the commandline argument to your windows_run.bat e.g.
+
+> REM Please set the following commandline arguments to your prefered settings
+set COMMANDLINE_ARGS=--execution-provider cuda --frame-processor face_swapper face_enhancer --video-encoder libvpx-vp9
+
+This would set acceleration to NVIDIA Cuda, enable swapping and enhancements and use the latest video encoder. Please look below for an overview of possible commandline arguments.
+
+
+
 ### Usage
 
-- Run the `windows_run.bat` from the Installer. Edit the .bat file to add your desired commandline arguments 
-- Linux `python run.py (and optional commandline arguments)`
+- Windows: run the `windows_run.bat` from the Installer. Edit the .bat file to add your desired commandline arguments 
+- Linux: `python run.py (and optional commandline arguments)`
 
 Additional command line arguments are given below. To find out what they do, check [this guide](https://github.com/s0md3v/roop/wiki/Advanced-Options).
 
