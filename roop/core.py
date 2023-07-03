@@ -15,7 +15,7 @@ import shutil
 import argparse
 import torch
 import onnxruntime
-import tensorflow
+#import tensorflow
 
 import roop.globals
 import roop.metadata
@@ -96,11 +96,11 @@ def suggest_execution_threads() -> int:
 
 def limit_resources() -> None:
     # prevent tensorflow memory leak
-    gpus = tensorflow.config.experimental.list_physical_devices('GPU')
-    for gpu in gpus:
-        tensorflow.config.experimental.set_virtual_device_configuration(gpu, [
-            tensorflow.config.experimental.VirtualDeviceConfiguration(memory_limit=1024)
-        ])
+    # gpus = tensorflow.config.experimental.list_physical_devices('GPU')
+    # for gpu in gpus:
+        # tensorflow.config.experimental.set_virtual_device_configuration(gpu, [
+            # tensorflow.config.experimental.VirtualDeviceConfiguration(memory_limit=1024)
+        # ])
     # limit memory usage
     if roop.globals.max_memory:
         memory = roop.globals.max_memory * 1024 ** 3
@@ -150,7 +150,7 @@ def start() -> None:
         for frame_processor in get_frame_processors_modules(roop.globals.frame_processors):
             target = roop.globals.target_path
             if frame_processor.NAME == 'ROOP.FACE-ENHANCER':
-                if not roop.globals.post_enhance:
+                if roop.globals.selected_enhancer == None or roop.globals.selected_enhancer == 'None':
                     continue
                 target = roop.globals.output_path
 
@@ -173,7 +173,7 @@ def start() -> None:
     extract_frames(roop.globals.target_path)
     temp_frame_paths = get_temp_frame_paths(roop.globals.target_path)
     for frame_processor in get_frame_processors_modules(roop.globals.frame_processors):
-        if frame_processor.NAME == 'ROOP.FACE-ENHANCER' and not roop.globals.post_enhance:
+        if frame_processor.NAME == 'ROOP.FACE-ENHANCER' and roop.globals.selected_enhancer == 'None':
             continue
 
         update_status(f'{frame_processor.NAME} in progress...')

@@ -8,7 +8,5 @@ customtkinter==5.1.3
 torch==2.0.1
 torchvision==0.15.2
 onnxruntime==1.15.0
-tensorflow==2.12.0
-opennsfw2==0.10.2
 protobuf==4.23.2
 tqdm==4.65.0

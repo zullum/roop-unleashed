@@ -40,7 +40,6 @@ SELECTED_FACE_DATA_INPUT = None
 SELECTED_FACE_DATA_OUTPUT = None
 
 
-
 def init(start: Callable, destroy: Callable) -> ctk.CTk:
     global ROOT, PREVIEW, FACE_SELECT
 
@@ -65,14 +64,21 @@ def create_root(start: Callable, destroy: Callable) -> ctk.CTk:
 
     base_x1 = 0.075
     base_x2 = 0.575
-    base_y = 0.6
-
+    base_y = 0.615
+    
     source_button = ctk.CTkButton(root, text='Select image with face(s)', width=IMAGE_BUTTON_WIDTH, height=IMAGE_BUTTON_HEIGHT, compound='top', anchor='center', command=lambda: select_source_path())
     source_button.place(relx=base_x1, rely=0.05)
 
     target_button = ctk.CTkButton(root, text='Select target image/video', width=IMAGE_BUTTON_WIDTH, height=IMAGE_BUTTON_HEIGHT, compound='top', anchor='center', command=lambda: select_target_path())
     target_button.place(relx=base_x2, rely=0.05)
 
+    enhance_label = ctk.CTkLabel(root, text='Select face enhancement engine', anchor='w')
+    enhance_label.place(relx=base_x1, rely=0.47)
+    enhance_label.configure(text_color=ctk.ThemeManager.theme.get('RoopDonate').get('text_color'))
+    
+    enhancer_cb = ctk.CTkComboBox(root, values=["None", "Codeformer", "DMDNet", "GFPGAN"], width=IMAGE_BUTTON_WIDTH, command=select_enhancer)
+    enhancer_cb.set("None")
+    enhancer_cb.place(relx=base_x1, rely=0.512)
     
     keep_fps_value = ctk.BooleanVar(value=roop.globals.keep_fps)
     keep_fps_checkbox = ctk.CTkSwitch(root, text='Keep fps', variable=keep_fps_value, command=lambda: setattr(roop.globals, 'keep_fps', not roop.globals.keep_fps))
@@ -89,10 +95,6 @@ def create_root(start: Callable, destroy: Callable) -> ctk.CTk:
     many_faces_value = ctk.BooleanVar(value=roop.globals.many_faces)
     many_faces_switch = ctk.CTkSwitch(root, text='Many faces', variable=many_faces_value, command=lambda: setattr(roop.globals, 'many_faces', many_faces_value.get()))
     many_faces_switch.place(relx=base_x2, rely=0.65)
-
-    enhance_value = ctk.BooleanVar(value=roop.globals.post_enhance)
-    enhance_switch = ctk.CTkSwitch(root, text='Post enhance images', variable=enhance_value, command=lambda: setattr(roop.globals, 'post_enhance', enhance_value.get()))
-    enhance_switch.place(relx=base_x1, rely=0.7)
 
     base_y = 0.8
   
@@ -249,6 +251,11 @@ def select_output_path(start: Callable[[], None]) -> None:
         roop.globals.output_path = output_path
         RECENT_DIRECTORY_OUTPUT = os.path.dirname(roop.globals.output_path)
         start()
+
+
+def select_enhancer(choice):
+    roop.globals.selected_enhancer = choice
+
 
 def show_result():
     open_with_default_app(roop.globals.output_path)
