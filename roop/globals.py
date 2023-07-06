@@ -17,3 +17,6 @@ headless = None
 log_level = 'error'
 selected_enhancer = None
 FACE_ENHANCER = None
+
+SELECTED_FACE_DATA_INPUT = None
+SELECTED_FACE_DATA_OUTPUT = None

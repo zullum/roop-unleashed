@@ -36,9 +36,6 @@ FACE_BUTTONS = []
 INPUT_FACES_DATA = None
 OUTPUT_FACES_DATA = None
 
-SELECTED_FACE_DATA_INPUT = None
-SELECTED_FACE_DATA_OUTPUT = None
-
 
 def init(start: Callable, destroy: Callable) -> ctk.CTk:
     global ROOT, PREVIEW, FACE_SELECT
@@ -64,7 +61,7 @@ def create_root(start: Callable, destroy: Callable) -> ctk.CTk:
 
     base_x1 = 0.075
     base_x2 = 0.575
-    base_y = 0.615
+    base_y = 0.635
     
     source_button = ctk.CTkButton(root, text='Select image with face(s)', width=IMAGE_BUTTON_WIDTH, height=IMAGE_BUTTON_HEIGHT, compound='top', anchor='center', command=lambda: select_source_path())
     source_button.place(relx=base_x1, rely=0.05)
@@ -73,12 +70,12 @@ def create_root(start: Callable, destroy: Callable) -> ctk.CTk:
     target_button.place(relx=base_x2, rely=0.05)
 
     enhance_label = ctk.CTkLabel(root, text='Select face enhancement engine', anchor='w')
-    enhance_label.place(relx=base_x1, rely=0.47)
+    enhance_label.place(relx=base_x1, rely=0.49)
     enhance_label.configure(text_color=ctk.ThemeManager.theme.get('RoopDonate').get('text_color'))
     
     enhancer_cb = ctk.CTkComboBox(root, values=["None", "Codeformer", "DMDNet", "GFPGAN"], width=IMAGE_BUTTON_WIDTH, command=select_enhancer)
     enhancer_cb.set("None")
-    enhancer_cb.place(relx=base_x1, rely=0.512)
+    enhancer_cb.place(relx=base_x1, rely=0.532)
     
     keep_fps_value = ctk.BooleanVar(value=roop.globals.keep_fps)
     keep_fps_checkbox = ctk.CTkSwitch(root, text='Keep fps', variable=keep_fps_value, command=lambda: setattr(roop.globals, 'keep_fps', not roop.globals.keep_fps))
@@ -86,7 +83,7 @@ def create_root(start: Callable, destroy: Callable) -> ctk.CTk:
 
     keep_frames_value = ctk.BooleanVar(value=roop.globals.keep_frames)
     keep_frames_switch = ctk.CTkSwitch(root, text='Keep frames', variable=keep_frames_value, command=lambda: setattr(roop.globals, 'keep_frames', keep_frames_value.get()))
-    keep_frames_switch.place(relx=base_x1, rely=0.65)
+    keep_frames_switch.place(relx=base_x1, rely=0.67)
 
     keep_audio_value = ctk.BooleanVar(value=roop.globals.keep_audio)
     keep_audio_switch = ctk.CTkSwitch(root, text='Keep audio', variable=keep_audio_value, command=lambda: setattr(roop.globals, 'keep_audio', keep_audio_value.get()))
@@ -94,7 +91,7 @@ def create_root(start: Callable, destroy: Callable) -> ctk.CTk:
 
     many_faces_value = ctk.BooleanVar(value=roop.globals.many_faces)
     many_faces_switch = ctk.CTkSwitch(root, text='Many faces', variable=many_faces_value, command=lambda: setattr(roop.globals, 'many_faces', many_faces_value.get()))
-    many_faces_switch.place(relx=base_x2, rely=0.65)
+    many_faces_switch.place(relx=base_x2, rely=0.67)
 
     base_y = 0.8
   
@@ -150,7 +147,7 @@ def update_status(text: str) -> None:
 
 
 def select_source_path() -> None:
-    global RECENT_DIRECTORY_SOURCE, INPUT_FACES_DATA, SELECTED_FACE_DATA_INPUT
+    global RECENT_DIRECTORY_SOURCE, INPUT_FACES_DATA
 
     PREVIEW.withdraw()
     source_path = ctk.filedialog.askopenfilename(title='Select source image', initialdir=RECENT_DIRECTORY_SOURCE)
@@ -162,7 +159,7 @@ def select_source_path() -> None:
         if len(INPUT_FACES_DATA) > 0:
             if len(INPUT_FACES_DATA) == 1:
                 image = render_face_from_frame(INPUT_FACES_DATA[0][1], (IMAGE_BUTTON_WIDTH, IMAGE_BUTTON_HEIGHT))
-                SELECTED_FACE_DATA_INPUT = INPUT_FACES_DATA[0][0]
+                roop.globals.SELECTED_FACE_DATA_INPUT = INPUT_FACES_DATA[0][0]
             else:
                 show_face_selection(INPUT_FACES_DATA, True)
         else:
@@ -174,7 +171,7 @@ def select_source_path() -> None:
 
 
 def select_target_path() -> None:
-    global RECENT_DIRECTORY_TARGET, SELECTED_FACE_DATA_OUTPUT, OUTPUT_FACES_DATA
+    global RECENT_DIRECTORY_TARGET, OUTPUT_FACES_DATA
 
     PREVIEW.withdraw()
     target_path = ctk.filedialog.askopenfilename(title='Select target image or video', initialdir=RECENT_DIRECTORY_TARGET)
@@ -183,17 +180,17 @@ def select_target_path() -> None:
         roop.globals.target_path = target_path
         RECENT_DIRECTORY_TARGET = os.path.dirname(roop.globals.target_path)
         if roop.globals.many_faces:
-            SELECTED_FACE_DATA_OUTPUT = None
+            roop.globals.SELECTED_FACE_DATA_OUTPUT = None
             image = render_image_preview(target_path, (IMAGE_BUTTON_WIDTH, IMAGE_BUTTON_HEIGHT))
         else:
             OUTPUT_FACES_DATA = extract_face_images(roop.globals.target_path, (False, 0))
             if len(OUTPUT_FACES_DATA) > 0:
                 if len(OUTPUT_FACES_DATA) == 1:
                     image = render_face_from_frame(OUTPUT_FACES_DATA[0][1], (IMAGE_BUTTON_WIDTH, IMAGE_BUTTON_HEIGHT))
-                    SELECTED_FACE_DATA_OUTPUT = OUTPUT_FACES_DATA[0][0]
-                    if SELECTED_FACE_DATA_INPUT is not None:
-                        emb1 = SELECTED_FACE_DATA_INPUT['embedding']
-                        emb2 = SELECTED_FACE_DATA_OUTPUT['embedding']
+                    roop.globals.SELECTED_FACE_DATA_OUTPUT = OUTPUT_FACES_DATA[0][0]
+                    if roop.globals.SELECTED_FACE_DATA_INPUT is not None:
+                        emb1 = roop.globals.SELECTED_FACE_DATA_INPUT['embedding']
+                        emb2 = roop.globals.SELECTED_FACE_DATA_OUTPUT['embedding']
                         dist = compute_cosine_distance(emb1, emb2)
                         print(f'Similarity Distance between Source->Target={dist}')
                 else:
@@ -205,7 +202,7 @@ def select_target_path() -> None:
         roop.globals.target_path = target_path
         RECENT_DIRECTORY_TARGET = os.path.dirname(roop.globals.target_path)
         if roop.globals.many_faces:
-            SELECTED_FACE_DATA_OUTPUT = None
+            roop.globals.SELECTED_FACE_DATA_OUTPUT = None
             image = render_video_preview(target_path, (IMAGE_BUTTON_WIDTH, IMAGE_BUTTON_HEIGHT))
         else:
             max_frame = get_video_frame_total(roop.globals.target_path)
@@ -222,7 +219,7 @@ def select_target_path() -> None:
             if len(OUTPUT_FACES_DATA) > 0:
                 if len(OUTPUT_FACES_DATA) == 1:
                     image = render_face_from_frame(OUTPUT_FACES_DATA[0][1], (IMAGE_BUTTON_WIDTH, IMAGE_BUTTON_HEIGHT))
-                    SELECTED_FACE_DATA_OUTPUT = OUTPUT_FACES_DATA[0][0]
+                    roop.globals.SELECTED_FACE_DATA_OUTPUT = OUTPUT_FACES_DATA[0][0]
                 else:
                     show_face_selection(OUTPUT_FACES_DATA, False)
             else:
@@ -316,7 +313,7 @@ def update_preview(frame_number: int = 0) -> None:
             if frame_processor.NAME == 'ROOP.FACE-ENHANCER':
                 continue
 
-            temp_frame = frame_processor.process_frame(source_face=SELECTED_FACE_DATA_INPUT, target_face=SELECTED_FACE_DATA_OUTPUT, temp_frame=temp_frame)
+            temp_frame = frame_processor.process_frame(source_face=roop.globals.SELECTED_FACE_DATA_INPUT, target_face=roop.globals.SELECTED_FACE_DATA_OUTPUT, temp_frame=temp_frame)
             image = Image.fromarray(cv2.cvtColor(temp_frame, cv2.COLOR_BGR2RGB))
             image = ImageOps.contain(image, (PREVIEW_MAX_WIDTH, PREVIEW_MAX_HEIGHT), Image.LANCZOS)
             image = ctk.CTkImage(image, size=image.size)
@@ -346,21 +343,21 @@ def cancel_face_selection() -> None:
     ROOT.focus()
 
 def select_face(index, is_input) -> None:
-    global SELECTED_FACE_DATA_INPUT, SELECTED_FACE_DATA_OUTPUT, source_button, target_button, INPUT_FACES_DATA, OUTPUT_FACES_DATA
+    global source_button, target_button, INPUT_FACES_DATA, OUTPUT_FACES_DATA
 
     if is_input:
-        SELECTED_FACE_DATA_INPUT = INPUT_FACES_DATA[index][0]
+        roop.globals.SELECTED_FACE_DATA_INPUT = INPUT_FACES_DATA[index][0]
         image = render_face_from_frame(INPUT_FACES_DATA[index][1], (IMAGE_BUTTON_WIDTH, IMAGE_BUTTON_HEIGHT))
         source_button.configure(image=image)
         source_button._draw()
     else:
-        SELECTED_FACE_DATA_OUTPUT = OUTPUT_FACES_DATA[index][0]
+        roop.globals.SELECTED_FACE_DATA_OUTPUT = OUTPUT_FACES_DATA[index][0]
         image = render_face_from_frame(OUTPUT_FACES_DATA[index][1], (IMAGE_BUTTON_WIDTH, IMAGE_BUTTON_HEIGHT))
         target_button.configure(image=image)
         target_button._draw()
-        if SELECTED_FACE_DATA_INPUT is not None:
-            emb1 = SELECTED_FACE_DATA_INPUT['embedding']
-            emb2 = SELECTED_FACE_DATA_OUTPUT['embedding']
+        if roop.globals.SELECTED_FACE_DATA_INPUT is not None:
+            emb1 = roop.globals.SELECTED_FACE_DATA_INPUT['embedding']
+            emb2 = roop.globals.SELECTED_FACE_DATA_OUTPUT['embedding']
             dist = compute_cosine_distance(emb1, emb2)
             print(f'Similarity Distance between Source->Target={dist}')
 

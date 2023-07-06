@@ -52,7 +52,7 @@ def enhance_face(temp_frame: Frame) -> Frame:
             if roop.globals.selected_enhancer == "DMDNet":
                 return enhance_DMDNet(temp_frame)
             elif roop.globals.selected_enhancer == "Codeformer":
-                return enhance_Codeformer(temp_frame)
+                temp_frame = enhance_Codeformer(temp_frame)
             elif roop.globals.selected_enhancer == "GFPGAN":
                 temp_frame = enhance_GFPGAN(temp_frame)  
             else:

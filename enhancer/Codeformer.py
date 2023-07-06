@@ -33,7 +33,7 @@ def create():
     CODE_FORMER.eval()
     
     FACE_HELPER = FaceRestoreHelper(
-            upscale_factor = int(2),
+            upscale_factor = int(1),
             face_size=512,
             crop_ratio=(1, 1),
             det_model="retinaface_resnet50",
@@ -61,9 +61,10 @@ def enhance_Codeformer(temp_frame):
             face_t = data_preprocess(cropped_face)
             face_enhanced = restore_face(face_t)
             FACE_HELPER.add_restored_face(face_enhanced)
-            FACE_HELPER.get_inverse_affine()
-            enhanced_img = FACE_HELPER.paste_faces_to_input_image()
-            return enhanced_img
+
+        FACE_HELPER.get_inverse_affine()
+        enhanced_img = FACE_HELPER.paste_faces_to_input_image()
+        return enhanced_img
 
     except RuntimeError as error:
         print(f"Failed inference for CodeFormer: {error}")

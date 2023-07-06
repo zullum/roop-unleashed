@@ -155,7 +155,7 @@ def start() -> None:
                 target = roop.globals.output_path
 
             update_status(f'{frame_processor.NAME} in progress...')
-            frame_processor.process_image(ui.SELECTED_FACE_DATA_INPUT, ui.SELECTED_FACE_DATA_OUTPUT, target, roop.globals.output_path)
+            frame_processor.process_image(ui.SELECTED_FACE_DATA_INPUT, roop.globals.SELECTED_FACE_DATA_OUTPUT, target, roop.globals.output_path)
             frame_processor.post_process()
             release_resources()
         if is_image(roop.globals.target_path):
@@ -177,7 +177,7 @@ def start() -> None:
             continue
 
         update_status(f'{frame_processor.NAME} in progress...')
-        frame_processor.process_video(ui.SELECTED_FACE_DATA_INPUT, ui.SELECTED_FACE_DATA_OUTPUT, temp_frame_paths)
+        frame_processor.process_video(roop.globals.SELECTED_FACE_DATA_INPUT, roop.globals.SELECTED_FACE_DATA_OUTPUT, temp_frame_paths)
         frame_processor.post_process()
         release_resources()
     # handles fps
