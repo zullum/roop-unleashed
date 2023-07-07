@@ -69,6 +69,10 @@ def create_root(start: Callable, destroy: Callable) -> ctk.CTk:
     target_button = ctk.CTkButton(root, text='Select target image/video', width=IMAGE_BUTTON_WIDTH, height=IMAGE_BUTTON_HEIGHT, compound='top', anchor='center', command=lambda: select_target_path())
     target_button.place(relx=base_x2, rely=0.05)
 
+    target_folder_button = ctk.CTkButton(root, text='Select target folder', width=IMAGE_BUTTON_WIDTH, command=lambda: select_target_folder())
+    target_folder_button.place(relx=base_x2, rely=0.45)
+
+
     enhance_label = ctk.CTkLabel(root, text='Select face enhancement engine', anchor='w')
     enhance_label.place(relx=base_x1, rely=0.49)
     enhance_label.configure(text_color=ctk.ThemeManager.theme.get('RoopDonate').get('text_color'))
@@ -85,9 +89,9 @@ def create_root(start: Callable, destroy: Callable) -> ctk.CTk:
     keep_frames_switch = ctk.CTkSwitch(root, text='Keep frames', variable=keep_frames_value, command=lambda: setattr(roop.globals, 'keep_frames', keep_frames_value.get()))
     keep_frames_switch.place(relx=base_x1, rely=0.67)
 
-    keep_audio_value = ctk.BooleanVar(value=roop.globals.keep_audio)
-    keep_audio_switch = ctk.CTkSwitch(root, text='Keep audio', variable=keep_audio_value, command=lambda: setattr(roop.globals, 'keep_audio', keep_audio_value.get()))
-    keep_audio_switch.place(relx=base_x2, rely=base_y)
+    skip_audio_value = ctk.BooleanVar(value=roop.globals.skip_audio)
+    skip_audio_switch = ctk.CTkSwitch(root, text='Skip audio', variable=skip_audio_value, command=lambda: setattr(roop.globals, 'skip_audio', skip_audio_value.get()))
+    skip_audio_switch.place(relx=base_x2, rely=base_y)
 
     many_faces_value = ctk.BooleanVar(value=roop.globals.many_faces)
     many_faces_switch = ctk.CTkSwitch(root, text='Many faces', variable=many_faces_value, command=lambda: setattr(roop.globals, 'many_faces', many_faces_value.get()))
@@ -189,8 +193,8 @@ def select_target_path() -> None:
                     image = render_face_from_frame(OUTPUT_FACES_DATA[0][1], (IMAGE_BUTTON_WIDTH, IMAGE_BUTTON_HEIGHT))
                     roop.globals.SELECTED_FACE_DATA_OUTPUT = OUTPUT_FACES_DATA[0][0]
                     if roop.globals.SELECTED_FACE_DATA_INPUT is not None:
-                        emb1 = roop.globals.SELECTED_FACE_DATA_INPUT['embedding']
-                        emb2 = roop.globals.SELECTED_FACE_DATA_OUTPUT['embedding']
+                        emb1 = roop.globals.SELECTED_FACE_DATA_INPUT.normed_embedding
+                        emb2 = roop.globals.SELECTED_FACE_DATA_OUTPUT.normed_embedding
                         dist = compute_cosine_distance(emb1, emb2)
                         print(f'Similarity Distance between Source->Target={dist}')
                 else:
@@ -231,6 +235,12 @@ def select_target_path() -> None:
     target_button.configure(image=image)
     target_button._draw()
 
+
+def select_target_folder() -> None:
+        roop.globals.target_folder_path = ctk.filedialog.askdirectory(title='Select folder with images or videos')
+        print(f'Target Folder set to {roop.globals.target_folder_path}')
+
+
 def select_output_path(start):
     global RECENT_DIRECTORY_OUTPUT
 
@@ -238,12 +248,15 @@ def select_output_path(start):
 def select_output_path(start: Callable[[], None]) -> None:
     global RECENT_DIRECTORY_OUTPUT
 
-    if is_image(roop.globals.target_path):
+    if roop.globals.target_folder_path is not None:
+        output_path = ctk.filedialog.askdirectory(title='Select output folder')
+    elif is_image(roop.globals.target_path):
         output_path = ctk.filedialog.asksaveasfilename(title='Save image output file', defaultextension='.png', initialfile='output.png', initialdir=RECENT_DIRECTORY_OUTPUT)
     elif is_video(roop.globals.target_path):
         output_path = ctk.filedialog.asksaveasfilename(title='Save video output file', defaultextension='.mp4', initialfile='output.mp4', initialdir=RECENT_DIRECTORY_OUTPUT)
     else:
         output_path = None
+
     if output_path:
         roop.globals.output_path = output_path
         RECENT_DIRECTORY_OUTPUT = os.path.dirname(roop.globals.output_path)
@@ -356,8 +369,8 @@ def select_face(index, is_input) -> None:
         target_button.configure(image=image)
         target_button._draw()
         if roop.globals.SELECTED_FACE_DATA_INPUT is not None:
-            emb1 = roop.globals.SELECTED_FACE_DATA_INPUT['embedding']
-            emb2 = roop.globals.SELECTED_FACE_DATA_OUTPUT['embedding']
+            emb1 = roop.globals.SELECTED_FACE_DATA_INPUT.normed_embedding
+            emb2 = roop.globals.SELECTED_FACE_DATA_OUTPUT.normed_embedding
             dist = compute_cosine_distance(emb1, emb2)
             print(f'Similarity Distance between Source->Target={dist}')
 

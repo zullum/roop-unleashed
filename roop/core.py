@@ -20,9 +20,9 @@ import onnxruntime
 import roop.globals
 import roop.metadata
 import roop.ui as ui
-#from roop.predicter import predict_image, predict_video
 from roop.processors.frame.core import get_frame_processors_modules
 from roop.utilities import has_image_extension, is_image, is_video, detect_fps, create_video, extract_frames, get_temp_frame_paths, restore_audio, create_temp, move_temp, clean_temp, normalize_output_path
+from roop.face_analyser import extract_face_images
 
 if 'ROCMExecutionProvider' in roop.globals.execution_providers:
     del torch
@@ -34,14 +34,17 @@ warnings.filterwarnings('ignore', category=UserWarning, module='torchvision')
 def parse_args() -> None:
     signal.signal(signal.SIGINT, lambda signal_number, frame: destroy())
     program = argparse.ArgumentParser(formatter_class=lambda prog: argparse.HelpFormatter(prog, max_help_position=100))
-    program.add_argument('-s', '--source', help='select an source image', dest='source_path')
-    program.add_argument('-t', '--target', help='select an target image or video', dest='target_path')
+    program.add_argument('-s', '--source', help='select a source image', dest='source_path')
+    program.add_argument('-t', '--target', help='select a target image or video', dest='target_path')
     program.add_argument('-o', '--output', help='select output file or directory', dest='output_path')
+    program.add_argument('-d', '--dir', help='select a target directory with images or videos', dest='target_path')
     program.add_argument('--frame-processor', help='frame processors (choices: face_swapper, face_enhancer, ...)', dest='frame_processor', default=['face_swapper'], nargs='+')
-    program.add_argument('--keep-fps', help='keep original fps', dest='keep_fps', action='store_true', default=False)
-    program.add_argument('--keep-audio', help='keep original audio', dest='keep_audio', action='store_true', default=True)
-    program.add_argument('--keep-frames', help='keep temporary frames', dest='keep_frames', action='store_true', default=False)
-    program.add_argument('--many-faces', help='process every face', dest='many_faces', action='store_true', default=False)
+    program.add_argument('--keep-fps', help='keep target fps', dest='keep_fps', action='store_true')
+    program.add_argument('--keep-frames', help='keep temporary frames', dest='keep_frames', action='store_true')
+    program.add_argument('--skip-audio', help='skip target audio', dest='skip_audio', action='store_true')
+    program.add_argument('--many-faces', help='process every face', dest='many_faces', action='store_true')
+    program.add_argument('--source-face_index', help='index position of source face in image', dest='source_face_index', type=int, default=0)
+    program.add_argument('--target-face_index', help='index position of target face in image', dest='target_face_index', type=int, default=0)
     program.add_argument('--video-encoder', help='adjust output video encoder', dest='video_encoder', default='libx264', choices=['libx264', 'libx265', 'libvpx-vp9'])
     program.add_argument('--video-quality', help='adjust output video quality', dest='video_quality', type=int, default=18, choices=range(52), metavar='[0-51]')
     program.add_argument('--max-memory', help='maximum amount of RAM in GB', dest='max_memory', type=int, default=suggest_max_memory())
@@ -57,9 +60,11 @@ def parse_args() -> None:
     roop.globals.frame_processors = args.frame_processor
     roop.globals.headless = args.source_path or args.target_path or args.output_path
     roop.globals.keep_fps = args.keep_fps
-    roop.globals.keep_audio = args.keep_audio
     roop.globals.keep_frames = args.keep_frames
+    roop.globals.skip_audio = args.skip_audio
     roop.globals.many_faces = args.many_faces
+    roop.globals.source_face_index = args.source_face_index
+    roop.globals.target_face_index = args.target_face_index
     roop.globals.video_encoder = args.video_encoder
     roop.globals.video_quality = args.video_quality
     roop.globals.max_memory = args.max_memory
@@ -138,40 +143,49 @@ def update_status(message: str, scope: str = 'ROOP.CORE') -> None:
 
 
 def start() -> None:
+    if roop.globals.headless:
+        faces = extract_face_images(roop.globals.source_path,  (False, 0))
+        roop.globals.SELECTED_FACE_DATA_INPUT = faces[roop.globals.source_face_index]
+        faces = extract_face_images(roop.globals.target_path,  (False, has_image_extension(roop.globals.target_path)))
+        roop.globals.SELECTED_FACE_DATA_OUTPUT = faces[roop.globals.target_face_index]
+        if 'face_enhancer' in roop.globals.frame_processors:
+            roop.globals.selected_enhancer = 'GFPGAN'
+
+    if roop.globals.target_folder_path is not None:
+        batch_process()
+
     for frame_processor in get_frame_processors_modules(roop.globals.frame_processors):
         if not frame_processor.pre_start():
             return
-    # process image to image
-    if has_image_extension(roop.globals.target_path):
 
-        #if predict_image(roop.globals.target_path) > 0.85:
-        #    destroy()
-        # todo: this needs a temp path for images to work with multiple frame processors
+    current_target = roop.globals.target_path
+
+    # process image to image
+    if has_image_extension(current_target):
         for frame_processor in get_frame_processors_modules(roop.globals.frame_processors):
-            target = roop.globals.target_path
+            target = current_target
             if frame_processor.NAME == 'ROOP.FACE-ENHANCER':
                 if roop.globals.selected_enhancer == None or roop.globals.selected_enhancer == 'None':
                     continue
                 target = roop.globals.output_path
 
             update_status(f'{frame_processor.NAME} in progress...')
-            frame_processor.process_image(ui.SELECTED_FACE_DATA_INPUT, roop.globals.SELECTED_FACE_DATA_OUTPUT, target, roop.globals.output_path)
+            frame_processor.process_image(roop.globals.SELECTED_FACE_DATA_INPUT, roop.globals.SELECTED_FACE_DATA_OUTPUT, target, roop.globals.output_path)
             frame_processor.post_process()
             release_resources()
-        if is_image(roop.globals.target_path):
+        if is_image(current_target):
             update_status('Processing to image succeed!')
         else:
             update_status('Processing to image failed!')
         return
-    # process image to videos
-    #seconds, probabilities = predict_video_frames(video_path=roop.globals.target_path, frame_interval=100)
-    #if any(probability > 0.85 for probability in probabilities):
-    #    destroy()
+
     update_status('Creating temp resources...')
-    create_temp(roop.globals.target_path)
+    create_temp(current_target)
     update_status('Extracting frames...')
-    extract_frames(roop.globals.target_path)
-    temp_frame_paths = get_temp_frame_paths(roop.globals.target_path)
+    extract_frames(current_target)
+    temp_frame_paths = get_temp_frame_paths(current_target)
+    roop.globals.output_path = os.path.join(roop.globals.output_path, f'{root}.mp4')
+
     for frame_processor in get_frame_processors_modules(roop.globals.frame_processors):
         if frame_processor.NAME == 'ROOP.FACE-ENHANCER' and roop.globals.selected_enhancer == 'None':
             continue
@@ -185,31 +199,62 @@ def start() -> None:
         update_status('Detecting fps...')
         fps = detect_fps(roop.globals.target_path)
         update_status(f'Creating video with {fps} fps...')
-        create_video(roop.globals.target_path, fps)
+        create_video(current_target, fps)
     else:
         update_status('Creating video with 30.0 fps...')
-        create_video(roop.globals.target_path)
+        create_video(current_target)
     # handle audio
-    if roop.globals.keep_audio:
+    if roop.globals.skip_audio:
+        move_temp(current_target, roop.globals.output_path)
+        update_status('Skipping audio...')
+    else:
         if roop.globals.keep_fps:
             update_status('Restoring audio...')
         else:
             update_status('Restoring audio might cause issues as fps are not kept...')
-        restore_audio(roop.globals.target_path, roop.globals.output_path)
-    else:
-        move_temp(roop.globals.target_path, roop.globals.output_path)
+        restore_audio(current_target, roop.globals.output_path)
     # clean and validate
-    clean_temp(roop.globals.target_path)
-    if is_video(roop.globals.target_path):
+    clean_temp(current_target)
+    if is_video(current_target):
         update_status('Processing to video succeed!')
     else:
         update_status('Processing to video failed!')
 
 
+def batch_process() -> None:
+    files = [f for f in os.listdir(roop.globals.target_folder_path) if os.path.isfile(os.path.join(roop.globals.target_folder_path, f))]
+    update_status('Sorting videos/images')
+
+    imagefiles = []
+    imagetargets = []
+    videofiles = []
+    videotargets = []
+
+    for f in files:
+        if has_image_extension(os.path.join(roop.globals.target_folder_path, f)):
+            imagefiles.append(os.path.join(roop.globals.target_folder_path, f))
+            newfilename = os.path.splitext(f)
+            imagetargets.append(os.path.join(roop.globals.output_path, f'{newfilename}_fake.png'))
+        elif is_video(os.path.join(roop.globals.target_folder_path, f)):
+            videofiles.append(os.path.join(roop.globals.target_folder_path, f))
+            newfilename = os.path.splitext(f)
+            videotargets.append(os.path.join(roop.globals.output_path, f'{newfilename}_fake.mp4'))
+
+    for frame_processor in get_frame_processors_modules(roop.globals.frame_processors):
+        if frame_processor.NAME == 'ROOP.FACE-ENHANCER' and roop.globals.selected_enhancer == 'None':
+            continue
+
+        update_status(f'{frame_processor.NAME} in progress...')
+        frame_processor.process_batch_images(roop.globals.SELECTED_FACE_DATA_INPUT, roop.globals.SELECTED_FACE_DATA_OUTPUT, imagefiles)
+
+
+
+
+
 def destroy() -> None:
     if roop.globals.target_path:
         clean_temp(roop.globals.target_path)
-    quit()
+    sys.exit()
 
 
 def run() -> None:

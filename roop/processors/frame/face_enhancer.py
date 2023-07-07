@@ -11,7 +11,7 @@ from enhancer.DMDNet import DMDNet
 from roop.core import update_status
 from roop.face_analyser import get_one_face
 from roop.typing import Frame, Face
-from roop.utilities import conditional_download, resolve_relative_path, is_image, is_video
+from roop.utilities import conditional_download, resolve_relative_path, is_image, is_video, get_destfilename_from_path
 from PIL import Image
 from numpy import asarray
 from enhancer.GFPGAN import enhance_GFPGAN
@@ -68,19 +68,25 @@ def process_frame(source_path: str, temp_frame: Frame) -> Frame:
     return temp_frame
 
 
-def process_frames(source_face: Face, target_face: Face, temp_frame_paths: List[str], update: Callable[[], None]) -> None:
+def process_frames(is_batch: bool, source_face: Face, target_face: Face, temp_frame_paths: List[str], update: Callable[[], None]) -> None:
     for temp_frame_path in temp_frame_paths:
         temp_frame = cv2.imread(temp_frame_path)
-        result = process_frame(None, temp_frame)
+        if temp_frame is not None:
+            result = process_frame(None, temp_frame)
         if result is not None:
-            cv2.imwrite(temp_frame_path, result)
+            if is_batch:
+                tf = get_destfilename_from_path(temp_frame_path, roop.globals.output_path, '_fake.png')
+                cv2.imwrite(tf, result)
+            else:
+                cv2.imwrite(temp_frame_path, result)
         if update:
             update()
 
 
 def process_image(source_face: Face, target_face: Face, target_path: str, output_path: str) -> None:
     target_frame = cv2.imread(target_path)
-    result = process_frame(None, target_frame)
+    if target_frame is not None:
+        result = process_frame(None, target_frame)
     if result is not None:
         cv2.imwrite(output_path, result)
 
@@ -88,3 +94,9 @@ def process_image(source_face: Face, target_face: Face, target_path: str, output
 def process_video(source_face: Any, target_face: Any, temp_frame_paths: List[str]) -> None:
     roop.processors.frame.core.process_video(source_face, target_face, temp_frame_paths, process_frames)
 
+
+def process_batch_images(source_face: Any, target_face: Any, temp_frame_paths: List[str]) -> None:
+    global DIST_THRESHOLD
+
+    DIST_THRESHOLD = 0.85
+    roop.processors.frame.core.process_video(source_face, target_face, temp_frame_paths, process_frames)

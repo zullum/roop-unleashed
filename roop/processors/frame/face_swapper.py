@@ -8,7 +8,7 @@ import roop.processors.frame.core
 from roop.core import update_status
 from roop.face_analyser import get_one_face, get_many_faces
 from roop.typing import Face, Frame
-from roop.utilities import conditional_download, resolve_relative_path, is_image, is_video, compute_cosine_distance
+from roop.utilities import conditional_download, resolve_relative_path, is_image, is_video, compute_cosine_distance, get_destfilename_from_path
 
 FACE_SWAPPER = None
 THREAD_LOCK = threading.Lock()
@@ -67,11 +67,11 @@ def process_frame(source_face: Face, target_face: Face, temp_frame: Frame) -> Fr
                     temp_frame = swap_face(source_face, target_face, temp_frame)
     else:
         if target_face:
-            target_embedding = target_face['embedding']
+            target_embedding = target_face.normed_embedding
             many_faces = get_many_faces(temp_frame)
             target_face = None
             for dest_face in many_faces:
-                dest_embedding = dest_face['embedding']
+                dest_embedding = dest_face.normed_embedding
                 if compute_cosine_distance(target_embedding, dest_embedding) <= DIST_THRESHOLD:
                     target_face = dest_face
                     break
@@ -86,11 +86,17 @@ def process_frame(source_face: Face, target_face: Face, temp_frame: Frame) -> Fr
 
 
 
-def process_frames(source_face: Face, target_face: Face, temp_frame_paths: List[str], update: Callable[[], None]) -> None:
+def process_frames(is_batch: bool, source_face: Face, target_face: Face, temp_frame_paths: List[str], update: Callable[[], None]) -> None:
     for temp_frame_path in temp_frame_paths:
         temp_frame = cv2.imread(temp_frame_path)
-        result = process_frame(source_face, target_face, temp_frame)
-        cv2.imwrite(temp_frame_path, result)
+        if temp_frame is not None:
+            result = process_frame(source_face, target_face, temp_frame)
+            if result is not None:
+                if is_batch:
+                    tf = get_destfilename_from_path(temp_frame_path, roop.globals.output_path, '_fake.png')
+                    cv2.imwrite(tf, result)
+                else:
+                    cv2.imwrite(temp_frame_path, result)
         if update:
             update()
 
@@ -100,12 +106,21 @@ def process_image(source_face: Any, target_face: Any, target_path: str, output_p
 
     DIST_THRESHOLD = 0.03
     target_frame = cv2.imread(target_path)
-    result = process_frame(source_face, target_face, target_frame)
-    cv2.imwrite(output_path, result)
+    if target_frame is not None:
+        result = process_frame(source_face, target_face, target_frame)
+        if result is not None:
+            cv2.imwrite(output_path, result)
 
 
 def process_video(source_face: Any, target_face: Any, temp_frame_paths: List[str]) -> None:
     global DIST_THRESHOLD
 
-    DIST_THRESHOLD = 0.8
+    DIST_THRESHOLD = 0.85
     roop.processors.frame.core.process_video(source_face, target_face, temp_frame_paths, process_frames)
+
+
+def process_batch_images(source_face: Any, target_face: Any, temp_frame_paths: List[str]) -> None:
+    global DIST_THRESHOLD
+
+    DIST_THRESHOLD = 0.85
+    roop.processors.frame.core.process_batch(source_face, target_face, temp_frame_paths, process_frames)

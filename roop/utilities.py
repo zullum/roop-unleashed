@@ -7,10 +7,12 @@ import ssl
 import subprocess
 import sys
 import urllib
+import numpy
+
 from pathlib import Path
 from typing import List, Any
 from tqdm import tqdm
-from scipy.spatial import distance
+#from scipy.spatial import distance
 
 import roop.globals
 
@@ -86,6 +88,11 @@ def normalize_output_path(source_path: str, target_path: str, output_path: str) 
         if os.path.isdir(output_path):
             return os.path.join(output_path, source_name + '-' + target_name + target_extension)
     return output_path
+
+
+def get_destfilename_from_path(srcfilepath: str, destfilepath: str, extension: str) -> str:
+    fn = os.path.splitext(os.path.basename(srcfilepath))[0]
+    return os.path.join(destfilepath, f'{fn}{extension}')
 
 
 def create_temp(target_path: str) -> None:
@@ -177,4 +184,5 @@ def open_with_default_app(filename):
 
 @staticmethod        
 def compute_cosine_distance(emb1, emb2):
-    return distance.cosine(emb1, emb2)
+    #return distance.cosine(emb1, emb2)
+    return numpy.sum(numpy.square(emb1 - emb2))
