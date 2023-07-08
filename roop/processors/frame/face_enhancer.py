@@ -16,7 +16,7 @@ from PIL import Image
 from numpy import asarray
 from enhancer.GFPGAN import enhance_GFPGAN
 from enhancer.Codeformer import enhance_Codeformer
-from enhancer.DMDNet import enhance_DMDNet
+#from enhancer.DMDNet import enhance_DMDNet
 
 FACE_ENHANCER = None
 THREAD_SEMAPHORE = threading.Semaphore()
@@ -50,7 +50,8 @@ def enhance_face(temp_frame: Frame) -> Frame:
         temp_frame_original = Image.fromarray(temp_frame)
         with THREAD_LOCK:
             if roop.globals.selected_enhancer == "DMDNet":
-                return enhance_DMDNet(temp_frame)
+                #return enhance_DMDNet(temp_frame)
+                return temp_frame
             elif roop.globals.selected_enhancer == "Codeformer":
                 temp_frame = enhance_Codeformer(temp_frame)
             elif roop.globals.selected_enhancer == "GFPGAN":

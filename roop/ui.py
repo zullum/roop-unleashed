@@ -11,7 +11,7 @@ from roop.face_analyser import get_many_faces, get_one_face, extract_face_images
 from roop.capturer import get_video_frame, get_video_frame_total
 #from roop.predicter import predict_frame
 from roop.processors.frame.core import get_frame_processors_modules
-from roop.utilities import is_image, is_video, resolve_relative_path, open_with_default_app, compute_cosine_distance
+from roop.utilities import is_image, is_video, resolve_relative_path, open_with_default_app, compute_cosine_distance, has_extension
 
 ROOT = None
 ROOT_HEIGHT = 550
@@ -77,7 +77,7 @@ def create_root(start: Callable, destroy: Callable) -> ctk.CTk:
     enhance_label.place(relx=base_x1, rely=0.49)
     enhance_label.configure(text_color=ctk.ThemeManager.theme.get('RoopDonate').get('text_color'))
     
-    enhancer_cb = ctk.CTkComboBox(root, values=["None", "Codeformer", "DMDNet", "GFPGAN"], width=IMAGE_BUTTON_WIDTH, command=select_enhancer)
+    enhancer_cb = ctk.CTkComboBox(root, values=["None", "Codeformer", "DMDNet (unavailable)", "GFPGAN"], width=IMAGE_BUTTON_WIDTH, command=select_enhancer)
     enhancer_cb.set("None")
     enhancer_cb.place(relx=base_x1, rely=0.532)
     
@@ -167,6 +167,7 @@ def select_source_path() -> None:
             else:
                 show_face_selection(INPUT_FACES_DATA, True)
         else:
+            print('No face found!')
             roop.globals.source_path = None
     else:
         roop.globals.source_path = None
@@ -200,6 +201,7 @@ def select_target_path() -> None:
                 else:
                     show_face_selection(OUTPUT_FACES_DATA, False)
             else:
+                print('No face found!')
                 roop.globals.target_path = None
 
     elif is_video(target_path) or target_path.lower().endswith(('gif')):
@@ -250,9 +252,9 @@ def select_output_path(start: Callable[[], None]) -> None:
 
     if roop.globals.target_folder_path is not None:
         output_path = ctk.filedialog.askdirectory(title='Select output folder')
-    elif is_image(roop.globals.target_path):
+    elif is_image(roop.globals.target_path) and has_extension(roop.globals.target_path, ['gif']) == False:
         output_path = ctk.filedialog.asksaveasfilename(title='Save image output file', defaultextension='.png', initialfile='output.png', initialdir=RECENT_DIRECTORY_OUTPUT)
-    elif is_video(roop.globals.target_path):
+    elif is_video(roop.globals.target_path) or has_extension(roop.globals.target_path, ['gif']) == True:
         output_path = ctk.filedialog.asksaveasfilename(title='Save video output file', defaultextension='.mp4', initialfile='output.mp4', initialdir=RECENT_DIRECTORY_OUTPUT)
     else:
         output_path = None

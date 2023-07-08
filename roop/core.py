@@ -21,7 +21,7 @@ import roop.globals
 import roop.metadata
 import roop.ui as ui
 from roop.processors.frame.core import get_frame_processors_modules
-from roop.utilities import has_image_extension, is_image, is_video, detect_fps, create_video, extract_frames, get_temp_frame_paths, restore_audio, create_temp, move_temp, clean_temp, normalize_output_path
+from roop.utilities import has_image_extension, is_image, is_video, detect_fps, create_video, extract_frames, get_temp_frame_paths, restore_audio, create_temp, move_temp, clean_temp, normalize_output_path, has_extension
 from roop.face_analyser import extract_face_images
 
 if 'ROCMExecutionProvider' in roop.globals.execution_providers:
@@ -37,7 +37,7 @@ def parse_args() -> None:
     program.add_argument('-s', '--source', help='select a source image', dest='source_path')
     program.add_argument('-t', '--target', help='select a target image or video', dest='target_path')
     program.add_argument('-o', '--output', help='select output file or directory', dest='output_path')
-    program.add_argument('-d', '--dir', help='select a target directory with images or videos', dest='target_path')
+    program.add_argument('-f', '--folder', help='select a target folder with images or videos to batch process', dest='target_folder_path')
     program.add_argument('--frame-processor', help='frame processors (choices: face_swapper, face_enhancer, ...)', dest='frame_processor', default=['face_swapper'], nargs='+')
     program.add_argument('--keep-fps', help='keep target fps', dest='keep_fps', action='store_true')
     program.add_argument('--keep-frames', help='keep temporary frames', dest='keep_frames', action='store_true')
@@ -57,8 +57,14 @@ def parse_args() -> None:
     roop.globals.source_path = args.source_path
     roop.globals.target_path = args.target_path
     roop.globals.output_path = normalize_output_path(roop.globals.source_path, roop.globals.target_path, args.output_path)
-    roop.globals.frame_processors = args.frame_processor
+    roop.globals.target_folder_path = args.target_folder_path
     roop.globals.headless = args.source_path or args.target_path or args.output_path
+    # Always enable all processors when using GUI
+    if roop.globals.headless:
+        roop.globals.frame_processors = ['face_swapper', 'face_enhancer']
+    else:
+        roop.globals.frame_processors = args.frame_processor
+
     roop.globals.keep_fps = args.keep_fps
     roop.globals.keep_frames = args.keep_frames
     roop.globals.skip_audio = args.skip_audio
@@ -184,7 +190,6 @@ def start() -> None:
     update_status('Extracting frames...')
     extract_frames(current_target)
     temp_frame_paths = get_temp_frame_paths(current_target)
-    roop.globals.output_path = os.path.join(roop.globals.output_path, f'{root}.mp4')
 
     for frame_processor in get_frame_processors_modules(roop.globals.frame_processors):
         if frame_processor.NAME == 'ROOP.FACE-ENHANCER' and roop.globals.selected_enhancer == 'None':
@@ -204,7 +209,7 @@ def start() -> None:
         update_status('Creating video with 30.0 fps...')
         create_video(current_target)
     # handle audio
-    if roop.globals.skip_audio:
+    if roop.globals.skip_audio or has_extension(current_target, ['gif']):
         move_temp(current_target, roop.globals.output_path)
         update_status('Skipping audio...')
     else:
@@ -215,7 +220,7 @@ def start() -> None:
         restore_audio(current_target, roop.globals.output_path)
     # clean and validate
     clean_temp(current_target)
-    if is_video(current_target):
+    if is_video(roop.globals.output_path):
         update_status('Processing to video succeed!')
     else:
         update_status('Processing to video failed!')
@@ -226,19 +231,13 @@ def batch_process() -> None:
     update_status('Sorting videos/images')
 
     imagefiles = []
-    imagetargets = []
     videofiles = []
-    videotargets = []
 
     for f in files:
         if has_image_extension(os.path.join(roop.globals.target_folder_path, f)):
             imagefiles.append(os.path.join(roop.globals.target_folder_path, f))
-            newfilename = os.path.splitext(f)
-            imagetargets.append(os.path.join(roop.globals.output_path, f'{newfilename}_fake.png'))
         elif is_video(os.path.join(roop.globals.target_folder_path, f)):
             videofiles.append(os.path.join(roop.globals.target_folder_path, f))
-            newfilename = os.path.splitext(f)
-            videotargets.append(os.path.join(roop.globals.output_path, f'{newfilename}_fake.mp4'))
 
     for frame_processor in get_frame_processors_modules(roop.globals.frame_processors):
         if frame_processor.NAME == 'ROOP.FACE-ENHANCER' and roop.globals.selected_enhancer == 'None':
@@ -246,6 +245,44 @@ def batch_process() -> None:
 
         update_status(f'{frame_processor.NAME} in progress...')
         frame_processor.process_batch_images(roop.globals.SELECTED_FACE_DATA_INPUT, roop.globals.SELECTED_FACE_DATA_OUTPUT, imagefiles)
+
+    if len(videofiles) > 0:
+        for video in videofiles:
+            update_status(f'Processing {video}')
+            update_status('Creating temp resources...')
+            create_temp(video)
+            update_status('Extracting frames...')
+            extract_frames(video)
+            temp_frame_paths = get_temp_frame_paths(video)
+            for frame_processor in get_frame_processors_modules(roop.globals.frame_processors):
+                if frame_processor.NAME == 'ROOP.FACE-ENHANCER' and roop.globals.selected_enhancer == 'None':
+                    continue
+
+                update_status(f'{frame_processor.NAME} in progress...')
+                frame_processor.process_video(roop.globals.SELECTED_FACE_DATA_INPUT, roop.globals.SELECTED_FACE_DATA_OUTPUT, temp_frame_paths)
+                frame_processor.post_process()
+                release_resources()
+            # handles fps
+            if roop.globals.keep_fps:
+                update_status('Detecting fps...')
+                fps = detect_fps(video)
+                update_status(f'Creating video with {fps} fps...')
+                create_video(video, fps)
+            else:
+                update_status('Creating video with 30.0 fps...')
+                create_video(video)
+            # handle audio
+            if roop.globals.skip_audio:
+                move_temp(video, roop.globals.output_path)
+                update_status('Skipping audio...')
+            else:
+                if roop.globals.keep_fps:
+                    update_status('Restoring audio...')
+                else:
+                    update_status('Restoring audio might cause issues as fps are not kept...')
+                restore_audio(video, roop.globals.output_path)
+            clean_temp(video)
+
 
 
 

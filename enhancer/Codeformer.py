@@ -1,3 +1,4 @@
+from operator import eq
 import cv2
 import torch
 import threading
@@ -33,7 +34,7 @@ def create():
     CODE_FORMER.eval()
     
     FACE_HELPER = FaceRestoreHelper(
-            upscale_factor = int(1),
+            upscale_factor = int(2),
             face_size=512,
             crop_ratio=(1, 1),
             det_model="retinaface_resnet50",
@@ -64,6 +65,10 @@ def enhance_Codeformer(temp_frame):
 
         FACE_HELPER.get_inverse_affine()
         enhanced_img = FACE_HELPER.paste_faces_to_input_image()
+        h, w, _ = temp_frame.shape
+        #if h != enhanced_img.shape.h or w != enhanced_img.shape.w:
+        enhanced_img = cv2.resize(enhanced_img, (w, h), interpolation=cv2.INTER_LINEAR)
+
         return enhanced_img
 
     except RuntimeError as error:

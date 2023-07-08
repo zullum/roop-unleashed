@@ -6,19 +6,25 @@
 Uncensored face-swapping for images and videos without training with an easy-to-use GUI.  
 Based on [roop](https://github.com/s0md3v/roop)
 
+![Screen](docs/screenshot.png)
+
+
 ### Additional Features
 
 - Uncensored
 - Better GUI
 - Selecting of specific faces in source/target possible
-- Dynamic face enhancement toggle
+- Batch processing of all image/video files in a folder
+- Selection of face enhancer engine
+
 
 ## Disclaimer
 
-This software is meant to be a productive contribution to the rapidly growing AI-generated media industry. It will help artists with tasks such as animating a custom character or using the character as a model for clothing etc.
-
+This project is for technical and academic use only.
 Users of this software are expected to use this software responsibly while abiding the local law. If a face of a real person is being used, users are suggested to get consent from the concerned person and clearly mention that it is a deepfake when posting content online. Developers of this software will not be responsible for actions of end-users.
+ **Please do not apply it to illegal and unethical scenarios.**
 
+In the event of violation of the legal and ethical requirements of the user's country or region, this code repository is exempt from liability
 
 ### Installation
 
@@ -62,7 +68,10 @@ options:
   -s SOURCE_PATH, --source SOURCE_PATH                     select an source image
   -t TARGET_PATH, --target TARGET_PATH                     select an target image or video
   -o OUTPUT_PATH, --output OUTPUT_PATH                     select output file or directory
+  -f TARGET_FOLDER, --folder TARGET_FOLDER                 select a target folder with images or videos to batch process 
   --frame-processor FRAME_PROCESSOR [FRAME_PROCESSOR ...]  frame processors (choices: face_swapper, face_enhancer, ...)
+  --source-face_index                                      index position of source face in image (from top left to bottom right, starting with 0)
+  --target-face_index                                      index position of target face in image (from top left to bottom right, starting with 0)
   --keep-fps                                               keep target fps
   --keep-frames                                            keep temporary frames
   --skip-audio                                             skip target audio
@@ -74,6 +83,24 @@ options:
   --execution-threads EXECUTION_THREADS                    number of execution threads
   -v, --version                                            show program's version number and exit
 ```
+
+New options not present in base roop:
+
+**option:** `-f TARGET_FOLDER`
+**default:** `unset`
+
+Specifies a folder with images/videos to batch process. When using this option, output path needs to be a folder path only. Final names will be automatically created from source. 
+
+**option:** `--source-face_index`
+**default:** `0`
+
+Selects the face to use as source, if there are multiple persons in that image
+
+**option:** `--target-face_index`
+**default:** `0`
+
+Selects the face to use as target, if there are multiple persons in that image
+
 
 Looking for a CLI mode? Using the -s/--source argument will make the run program in cli mode.
 
@@ -103,6 +130,26 @@ Image Credits: Alamy, Wikipedia, Imago
 ### FAQ
 
 ### Changelog
+
+**8.7.2023** v2.0.0
+
+Added batch processing for folders with images/videos
+Always enable all frame processors in UI Mode
+Better GIF Support (will be converted to video)
+Added source/target face selection to CLI
+Removed unnecessary predicter.py
+50:50 blending of original and enhanced image to preserve face features 
+Added Codeformer face restoration back
+Added preliminary generic DMDNet (not ready for release)
+Downloading of extra models/weights
+Central function to retrieve device
+Using normalized embeddings now
+keep_audio changed to skip_audio
+Bugfix: face swap in CLI
+Bugfix: Freeing resources
+Bugfix: Preview not swapping face in later frames
+Readme Additions
+
 
 **24.06.2023** Initial Public Release 1.1.0
 

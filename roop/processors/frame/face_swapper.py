@@ -14,7 +14,7 @@ FACE_SWAPPER = None
 THREAD_LOCK = threading.Lock()
 NAME = 'ROOP.FACE-SWAPPER'
 
-DIST_THRESHOLD = 0.03
+DIST_THRESHOLD = 0.85
 
 
 def get_face_swapper() -> Any:
@@ -104,7 +104,6 @@ def process_frames(is_batch: bool, source_face: Face, target_face: Face, temp_fr
 def process_image(source_face: Any, target_face: Any, target_path: str, output_path: str) -> None:
     global DIST_THRESHOLD
 
-    DIST_THRESHOLD = 0.03
     target_frame = cv2.imread(target_path)
     if target_frame is not None:
         result = process_frame(source_face, target_face, target_frame)
@@ -115,12 +114,10 @@ def process_image(source_face: Any, target_face: Any, target_path: str, output_p
 def process_video(source_face: Any, target_face: Any, temp_frame_paths: List[str]) -> None:
     global DIST_THRESHOLD
 
-    DIST_THRESHOLD = 0.85
     roop.processors.frame.core.process_video(source_face, target_face, temp_frame_paths, process_frames)
 
 
 def process_batch_images(source_face: Any, target_face: Any, temp_frame_paths: List[str]) -> None:
     global DIST_THRESHOLD
 
-    DIST_THRESHOLD = 0.85
     roop.processors.frame.core.process_batch(source_face, target_face, temp_frame_paths, process_frames)
