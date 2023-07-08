@@ -60,7 +60,7 @@ def parse_args() -> None:
     roop.globals.target_folder_path = args.target_folder_path
     roop.globals.headless = args.source_path or args.target_path or args.output_path
     # Always enable all processors when using GUI
-    if roop.globals.headless:
+    if not roop.globals.headless:
         roop.globals.frame_processors = ['face_swapper', 'face_enhancer']
     else:
         roop.globals.frame_processors = args.frame_processor
