@@ -1,6 +1,6 @@
 # roop-unleashed
 
-[Changelog](#changelog) • [Installation](#installation) • [Usage](#usage) • [Example](#example-input) • [FAQ](#faq)
+[Changelog](#changelog) • [Installation](#installation) • [Usage](#usage) • [Example](#example) • [FAQ](#faq)
 
 
 Uncensored face-swapping for images and videos without training with an easy-to-use GUI.  
@@ -133,22 +133,22 @@ Image Credits: Alamy, Wikipedia, Imago
 
 **8.7.2023** v2.0.0
 
-Added batch processing for folders with images/videos
-Always enable all frame processors in UI Mode
-Better GIF Support (will be converted to video)
-Added source/target face selection to CLI
-Removed unnecessary predicter.py
-50:50 blending of original and enhanced image to preserve face features 
-Added Codeformer face restoration back
-Added preliminary generic DMDNet (not ready for release)
-Downloading of extra models/weights
-Central function to retrieve device
-Using normalized embeddings now
-keep_audio changed to skip_audio
-Bugfix: face swap in CLI
-Bugfix: Freeing resources
-Bugfix: Preview not swapping face in later frames
-Readme Additions
+- Added batch processing for folders with images/videos
+- Always enable all frame processors in UI Mode
+- Better GIF Support (will be converted to video)
+- Added source/target face selection to CLI
+- Removed unnecessary predicter.py
+- 50:50 blending of original and enhanced image to preserve face features 
+- Added Codeformer face restoration back
+- Added preliminary generic DMDNet (not ready for release)
+- Downloading of extra models/weights
+- Central function to retrieve device
+- Using normalized embeddings now
+- keep_audio changed to skip_audio
+- Bugfix: face swap in CLI
+- Bugfix: Freeing resources
+- Bugfix: Preview not swapping face in later frames
+- Readme Additions
 
 
 **24.06.2023** Initial Public Release 1.1.0
