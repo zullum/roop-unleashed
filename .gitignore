@@ -5,3 +5,4 @@ temp
 __pycache__
 *.pth
 /start.bat
+/env

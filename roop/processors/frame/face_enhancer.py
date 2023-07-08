@@ -6,8 +6,6 @@ import roop.globals
 import roop.processors.frame.core
 import torch
 
-from enhancer.DMDNet import DMDNet
-
 from roop.core import update_status
 from roop.face_analyser import get_one_face
 from roop.typing import Frame, Face
@@ -16,7 +14,7 @@ from PIL import Image
 from numpy import asarray
 from enhancer.GFPGAN import enhance_GFPGAN
 from enhancer.Codeformer import enhance_Codeformer
-#from enhancer.DMDNet import enhance_DMDNet
+#from enhancer.DMDNet import DMDNet, enhance_DMDNet
 
 FACE_ENHANCER = None
 THREAD_SEMAPHORE = threading.Semaphore()

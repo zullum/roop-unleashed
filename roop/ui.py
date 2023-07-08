@@ -69,7 +69,7 @@ def create_root(start: Callable, destroy: Callable) -> ctk.CTk:
     target_button = ctk.CTkButton(root, text='Select target image/video', width=IMAGE_BUTTON_WIDTH, height=IMAGE_BUTTON_HEIGHT, compound='top', anchor='center', command=lambda: select_target_path())
     target_button.place(relx=base_x2, rely=0.05)
 
-    target_folder_button = ctk.CTkButton(root, text='Select target folder', width=IMAGE_BUTTON_WIDTH, command=lambda: select_target_folder())
+    target_folder_button = ctk.CTkButton(root, text='Select target folder (for batch processing)', width=IMAGE_BUTTON_WIDTH, command=lambda: select_target_folder())
     target_folder_button.place(relx=base_x2, rely=0.45)
 
 

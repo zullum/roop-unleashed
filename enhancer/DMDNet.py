@@ -21,7 +21,7 @@ import math
 import cv2 
 import os.path as osp
 import time
-import face_alignment # pip install face-alignment or conda install -c 1adrianb face_alignment
+#import face_alignment # pip install face-alignment or conda install -c 1adrianb face_alignment
 import os
 import math
 from torchvision.transforms.functional import normalize
