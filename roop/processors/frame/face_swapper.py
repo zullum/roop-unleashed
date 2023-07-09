@@ -14,7 +14,7 @@ FACE_SWAPPER = None
 THREAD_LOCK = threading.Lock()
 NAME = 'ROOP.FACE-SWAPPER'
 
-DIST_THRESHOLD = 0.85
+DIST_THRESHOLD = 0.65
 
 
 def get_face_swapper() -> Any:
@@ -67,11 +67,11 @@ def process_frame(source_face: Face, target_face: Face, temp_frame: Frame) -> Fr
                     temp_frame = swap_face(source_face, target_face, temp_frame)
     else:
         if target_face:
-            target_embedding = target_face.normed_embedding
+            target_embedding = target_face.embedding
             many_faces = get_many_faces(temp_frame)
             target_face = None
             for dest_face in many_faces:
-                dest_embedding = dest_face.normed_embedding
+                dest_embedding = dest_face.embedding
                 if compute_cosine_distance(target_embedding, dest_embedding) <= DIST_THRESHOLD:
                     target_face = dest_face
                     break

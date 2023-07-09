@@ -159,6 +159,8 @@ def start() -> None:
 
     if roop.globals.target_folder_path is not None:
         batch_process()
+        update_status('Batch processing finished!')
+        return
 
     for frame_processor in get_frame_processors_modules(roop.globals.frame_processors):
         if not frame_processor.pre_start():

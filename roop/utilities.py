@@ -7,12 +7,11 @@ import ssl
 import subprocess
 import sys
 import urllib
-import numpy
 
 from pathlib import Path
 from typing import List, Any
 from tqdm import tqdm
-#from scipy.spatial import distance
+from scipy.spatial import distance
 
 import roop.globals
 
@@ -185,7 +184,6 @@ def open_with_default_app(filename):
     else:                                   # linux variants
         subprocess.call(('xdg-open', filename))
 
-@staticmethod        
+
 def compute_cosine_distance(emb1, emb2):
-    #return distance.cosine(emb1, emb2)
-    return numpy.sum(numpy.square(emb1 - emb2))
+    return distance.cosine(emb1, emb2)

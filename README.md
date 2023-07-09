@@ -131,6 +131,15 @@ Image Credits: Alamy, Wikipedia, Imago
 
 ### Changelog
 
+**9.7.2023** v2.0.3
+
+- Reverted to use raw embeddings for detection
+- Reverted to use scipy spatial for using dot product instead of numpy
+- Changed batch process button to toggle
+- Bugfix: Batch processing not returning
+- Bugfix: removed staticmethod attrib
+
+
 **8.7.2023** v2.0.0
 
 - Added batch processing for folders with images/videos
