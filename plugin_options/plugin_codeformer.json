@@ -1,0 +1,8 @@
+{
+    "background_enhance": false,
+    "codeformer_fidelity": 0.8,
+    "face_upsample": true,
+    "skip_if_no_face": true,
+    "upscale": 1,
+    "v": "3.0"
+}

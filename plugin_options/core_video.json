@@ -1,0 +1,5 @@
+{
+    "v": "2.0",
+    "video_save_codec": "libx264",
+    "video_save_crf": 14
+}

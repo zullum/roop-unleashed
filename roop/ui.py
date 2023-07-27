@@ -1,425 +1,535 @@
 import os
-import customtkinter as ctk
-import webbrowser
+import time
+import gradio as gr
 import cv2
 import roop.globals
 import roop.metadata
+import pathlib
+import shutil
 
-from typing import Callable, Tuple
-from PIL import Image, ImageOps
-from roop.face_analyser import get_many_faces, get_one_face, extract_face_images
-from roop.capturer import get_video_frame, get_video_frame_total
-#from roop.predicter import predict_frame
-from roop.processors.frame.core import get_frame_processors_modules
-from roop.utilities import is_image, is_video, resolve_relative_path, open_with_default_app, compute_cosine_distance, has_extension
+from roop.face_helper import extract_face_images
+from roop.capturer import get_video_frame, get_video_frame_total, get_image_frame
+from roop.utilities import is_image, is_video, create_version_html, get_destfilename_from_path, create_gif_from_video
+from settings import Settings
 
-ROOT = None
-ROOT_HEIGHT = 550
-ROOT_WIDTH = 600
-
-PREVIEW = None
-PREVIEW_MAX_HEIGHT = 700
-PREVIEW_MAX_WIDTH = 1200
-IMAGE_BUTTON_WIDTH = 200
-IMAGE_BUTTON_HEIGHT = 200
+restart_server = False
+live_cam_active = False
 
 RECENT_DIRECTORY_SOURCE = None
 RECENT_DIRECTORY_TARGET = None
 RECENT_DIRECTORY_OUTPUT = None
 
-preview_label = None
-preview_slider = None
-source_label = None
-target_label = None
-status_label = None
-FACE_BUTTONS = []
-INPUT_FACES_DATA = None
-OUTPUT_FACES_DATA = None
+SELECTION_FACES_DATA = None
+
+last_image = None
+
+input_thumbs = []
+target_thumbs = []
 
 
-def init(start: Callable, destroy: Callable) -> ctk.CTk:
-    global ROOT, PREVIEW, FACE_SELECT
+IS_INPUT = True
+SELECTED_FACE_INDEX = 0
 
-    ROOT = create_root(start, destroy)
-    PREVIEW = create_preview(ROOT)
-    FACE_SELECT = create_select_faces_win(ROOT)
-    return ROOT
+roop.globals.keep_fps = None
+roop.globals.keep_frames = None
+roop.globals.skip_audio = None
+roop.globals.use_batch = None
+
+input_faces = None
+target_faces = None
+face_selection = None
+fake_cam_image = None
+
+current_cam_image = None
+cam_swapping = False
+
+selected_preview_index = 0
+
+settings = Settings('config.yaml')
+
+def prepare_environment():
+    roop.globals.output_path = os.path.abspath(os.path.join(os.getcwd(), "output"))
+    os.makedirs(roop.globals.output_path, exist_ok=True)
+    os.environ["TEMP"] = os.environ["TMP"] = os.path.abspath(os.path.join(os.getcwd(), "temp"))
+    os.makedirs(os.environ["TEMP"], exist_ok=True)
+    os.environ["GRADIO_TEMP_DIR"] = os.environ["TEMP"]
+
+
+def run():
+    global input_faces, target_faces, face_selection, fake_cam_image, restart_server, live_cam_active, settings
+
+    prepare_environment()
+
+    available_themes = ["Default", "gradio/glass", "gradio/monochrome", "gradio/seafoam", "gradio/soft", "gstaff/xkcd", "freddyaboulton/dracula_revamped", "ysharma/steampunk"]
+    server_name = settings.server_name
+    if server_name is None or len(server_name) < 1:
+        server_name = None
+    server_port = settings.server_port
+    if server_port <= 0:
+        server_port = None
+
+
+    live_cam_active = False
+    run_server = True
+
+    while run_server:
+
+        with gr.Blocks(title=f'{roop.metadata.name} {roop.metadata.version}', theme=settings.selected_theme, css="span {color: var(--block-info-text-color)}") as ui:
+            with gr.Row(variant='panel'):
+                    gr.Markdown(f"### [{roop.metadata.name} {roop.metadata.version}](https://github.com/C0untFloyd/roop-unleashed)")
+                    gr.HTML(create_version_html(), elem_id="versions")
+            with gr.Tab("Face Swap"):
+                with gr.Row():
+                    with gr.Column():
+                        input_faces = gr.Gallery(label="Input faces", allow_preview=True, preview=True, height=128, object_fit="scale-down")
+                        with gr.Row():
+                                bt_remove_selected_input_face = gr.Button("Remove selected")
+                                bt_clear_input_faces = gr.Button("Clear all", variant='stop')
+                        bt_srcimg = gr.Image(label='Source Face Image', type='filepath', tool=None)
+                    with gr.Column():
+                        target_faces = gr.Gallery(label="Target faces", allow_preview=True, preview=True, height=128, object_fit="scale-down")
+                        with gr.Row():
+                                bt_remove_selected_target_face = gr.Button("Remove selected")
+                        bt_destfiles = gr.Files(label='Target File(s)', file_count="multiple", elem_id='filelist')
+                with gr.Row():
+                    with gr.Column(visible=False) as dynamic_face_selection:
+                        face_selection = gr.Gallery(label="Detected faces", allow_preview=True, preview=True, height=256, object_fit="scale-down")
+                        with gr.Row():
+                            bt_faceselect = gr.Button("Use selected face")
+                            bt_cancelfaceselect = gr.Button("Cancel")
+            
+                with gr.Row():
+                    with gr.Column():
+                        selected_face_detection = gr.Dropdown(["First found", "All faces", "Selected face", "All female", "All male"], value="First found", label="Select face swapping method")
+                        max_face_distance = gr.Slider(0.01, 1.0, value=0.65, label="Max Face Similarity Threshold")
+                    with gr.Column():
+                        roop.globals.keep_fps = gr.Checkbox(label="Keep FPS", value=True)
+                        roop.globals.keep_frames = gr.Checkbox(label="Keep Frames", value=False)
+                        roop.globals.skip_audio = gr.Checkbox(label="Skip audio", value=False)
+                with gr.Row():
+                    with gr.Column():
+                        selected_enhancer = gr.Dropdown(["None", "Codeformer", "GFPGAN"], value="None", label="Select post-processing")
+                        with gr.Accordion(label="Masking", open=True):
+                            chk_useclip = gr.Checkbox(label="Use Text to Clip Masking", value=False)
+                            clip_text = gr.Textbox(label="List of objects to mask and restore back on fake image", placeholder="hands,hair")
+                            
+                    with gr.Column():
+                        blend_ratio = gr.Slider(0.0, 1.0, value=0.65, label="Original/Enhanced image blend ratio")
+                with gr.Row(variant='panel'):
+                    with gr.Column():
+                        bt_start = gr.Button("Start", variant='primary')
+                        with gr.Accordion(label="Results", open=True):
+                            resultfiles = gr.Files(label='Processed File(s)', interactive=False)
+                            resultimage = gr.Image(type='filepath', interactive=False)
+                    with gr.Column():
+                        bt_preview = gr.Button("Preview face swap", variant='secondary')
+                        with gr.Accordion(label="Preview Original/Fake Frame", open=True):
+                            previewimage = gr.Image(label="Preview Image", interactive=False)
+                            with gr.Column():
+                                preview_frame_num = gr.Slider(0, 0, value=0, label="Frame Number", step=1.0)
+                                bt_use_face_from_preview = gr.Button("Use Face from this Frame", variant='primary')
+                            
+
+                        
+                        
+            with gr.Tab("Live Cam"):
+                cam_toggle = gr.Checkbox(label='Activate', value=live_cam_active)
+                if live_cam_active:
+                    with gr.Row():
+                        with gr.Column():
+                            cam = gr.Webcam(label='Camera', source='webcam', interactive=True, streaming=False)
+                        with gr.Column():
+                            fake_cam_image = gr.Image(label='Fake Camera Output', interactive=False)
+
+
+            with gr.Tab("Extras"):
+                with gr.Row():
+                    files_to_process = gr.Files(label='File(s) to process', file_count="multiple")
+                with gr.Row(variant='panel'):
+                    with gr.Accordion(label="Post process", open=False):
+                        with gr.Column():
+                            selected_post_enhancer = gr.Dropdown(["None", "Codeformer", "GFPGAN"], value="None", label="Select post-processing")
+                        with gr.Column():
+                            gr.Button("Start").click(fn=lambda: gr.Info('Not yet implemented...'))
+                with gr.Row(variant='panel'):
+                    with gr.Accordion(label="Video/GIF", open=False):
+                        gr.Markdown("Extract frames from video")
+                        gr.Button("Start").click(fn=lambda: gr.Info('Not yet implemented...'))
+                        gr.Markdown("Create video from files")
+                        gr.Button("Start").click(fn=lambda: gr.Info('Not yet implemented...'))
+                        gr.Markdown("Create GIF from video")
+                        start_create_gif = gr.Button("Create GIF")
+                        
+            
+            with gr.Tab("Settings"):
+                with gr.Row():
+                    themes = gr.Dropdown(available_themes, label="Theme", info="Change needs complete restart", value=settings.selected_theme)
+                with gr.Row():
+                    input_server_name = gr.Textbox(label="Server Name", lines=1, info="Leave blank to run locally", value=settings.server_name)
+                    input_server_port = gr.Number(label="Server Port", precision=0, info="Leave at 0 to use default", value=settings.server_port)
+                    share_checkbox = gr.Checkbox(label="Public Server", value=settings.server_share)
+                with gr.Row():
+                    button_apply_settings = gr.Button("Apply Settings")
+                    button_clean_temp = gr.Button("Clean temp folder")
+                    button_apply_restart = gr.Button("Restart Server")
+
+            input_faces.select(on_select_input_face, None, None)
+            bt_remove_selected_input_face.click(fn=remove_selected_input_face, outputs=[input_faces])
+            bt_srcimg.change(fn=on_srcimg_changed, show_progress='full', inputs=bt_srcimg, outputs=[dynamic_face_selection, face_selection, input_faces])
+
+
+            target_faces.select(on_select_target_face, None, None)
+            bt_remove_selected_target_face.click(fn=remove_selected_target_face, outputs=[target_faces])
+
+            bt_destfiles.select(fn=on_destfiles_selected, inputs=[bt_destfiles], outputs=[previewimage, preview_frame_num])
+            bt_destfiles.clear(fn=on_clear_destfiles, outputs=[target_faces])
+            resultfiles.select(fn=on_resultfiles_selected, inputs=[resultfiles], outputs=[resultimage])
+
+            face_selection.select(on_select_face, None, None)
+            bt_faceselect.click(fn=on_selected_face, outputs=[dynamic_face_selection, face_selection, input_faces, target_faces])
+            bt_clear_input_faces.click(fn=on_clear_input_faces, outputs=[input_faces])
+
+            bt_start.click(fn=start_swap, 
+                inputs=[selected_enhancer, selected_face_detection, roop.globals.keep_fps, roop.globals.keep_frames, roop.globals.skip_audio, max_face_distance, blend_ratio, bt_destfiles, chk_useclip, clip_text],
+                outputs=[resultfiles, resultimage])
+            
+            bt_preview.click(fn=start_preview, 
+                inputs=[preview_frame_num, selected_enhancer, selected_face_detection, max_face_distance, blend_ratio, bt_destfiles, chk_useclip, clip_text], outputs=[previewimage])
+            preview_frame_num.change(fn=on_preview_frame_changed, inputs=[preview_frame_num, bt_destfiles], outputs=[previewimage], show_progress='hidden')
+            bt_use_face_from_preview.click(fn=on_use_face_from_selected, show_progress='full', inputs=[bt_destfiles, preview_frame_num], outputs=[dynamic_face_selection, face_selection, target_faces])
+            
+            # Live Cam
+            cam_toggle.change(fn=on_cam_toggle, inputs=[cam_toggle])
+            if live_cam_active:
+                cam.stream(on_stream_swap_cam, inputs=[cam, selected_enhancer, blend_ratio], outputs=[fake_cam_image], show_progress="hidden")
+
+            # Extras
+            start_create_gif.click(fn=on_create_gif, inputs=[files_to_process], outputs=[files_to_process])
+
+            # Settings
+            button_clean_temp.click(fn=clean_temp)
+            button_apply_settings.click(apply_settings, inputs=[themes, input_server_name, input_server_port, share_checkbox])
+            button_apply_restart.click(restart)
 
 
 
-def create_root(start: Callable, destroy: Callable) -> ctk.CTk:
-    global source_button, target_button, status_label
+        restart_server = False
+        try:
+            ui.queue().launch(inbrowser=True, server_name=server_name, server_port=server_port, share=settings.server_share, prevent_thread_lock=True)
+        except:
+            restart_server = True
+            run_server = False
+        try:
+            while restart_server == False:
+                time.sleep(5.0)
+        except (KeyboardInterrupt, OSError):
+            print("Keyboard interruption in main thread... closing server.")
+            run_server = False
+        ui.close()
 
-    ctk.deactivate_automatic_dpi_awareness()
-    ctk.set_appearance_mode('system')
-    ctk.set_default_color_theme(resolve_relative_path('ui.json'))
-    root = ctk.CTk()
-    root.minsize(ROOT_WIDTH, ROOT_HEIGHT)
-    root.title(f'{roop.metadata.name} {roop.metadata.version}')
-    root.configure()
-    root.protocol('WM_DELETE_WINDOW', lambda: destroy())
 
-    base_x1 = 0.075
-    base_x2 = 0.575
-    base_y = 0.635
+
+def on_srcimg_changed(imgsrc, progress=gr.Progress()):
+    global RECENT_DIRECTORY_SOURCE, SELECTION_FACES_DATA, IS_INPUT, input_faces, face_selection, input_thumbs, last_image
     
-    source_button = ctk.CTkButton(root, text='Select image with face(s)', width=IMAGE_BUTTON_WIDTH, height=IMAGE_BUTTON_HEIGHT, compound='top', anchor='center', command=lambda: select_source_path())
-    source_button.place(relx=base_x1, rely=0.05)
+    IS_INPUT = True
 
-    target_button = ctk.CTkButton(root, text='Select target image/video', width=IMAGE_BUTTON_WIDTH, height=IMAGE_BUTTON_HEIGHT, compound='top', anchor='center', command=lambda: select_target_path())
-    target_button.place(relx=base_x2, rely=0.05)
-
-    enhance_label = ctk.CTkLabel(root, text='Select face enhancement engine', anchor='w')
-    enhance_label.place(relx=base_x1, rely=0.49)
-    enhance_label.configure(text_color=ctk.ThemeManager.theme.get('RoopDonate').get('text_color'))
+    if imgsrc == None or last_image == imgsrc:
+        return gr.Column.update(visible=False), None, input_thumbs
     
-    enhancer_cb = ctk.CTkComboBox(root, values=["None", "Codeformer", "DMDNet (unavailable)", "GFPGAN"], width=IMAGE_BUTTON_WIDTH, command=select_enhancer)
-    enhancer_cb.set("None")
-    enhancer_cb.place(relx=base_x1, rely=0.532)
+    last_image = imgsrc
     
-    keep_fps_value = ctk.BooleanVar(value=roop.globals.keep_fps)
-    keep_fps_checkbox = ctk.CTkSwitch(root, text='Keep fps', variable=keep_fps_value, command=lambda: setattr(roop.globals, 'keep_fps', not roop.globals.keep_fps))
-    keep_fps_checkbox.place(relx=base_x1, rely=base_y)
-
-    keep_frames_value = ctk.BooleanVar(value=roop.globals.keep_frames)
-    keep_frames_switch = ctk.CTkSwitch(root, text='Keep frames', variable=keep_frames_value, command=lambda: setattr(roop.globals, 'keep_frames', keep_frames_value.get()))
-    keep_frames_switch.place(relx=base_x1, rely=0.68)
-
-    skip_audio_value = ctk.BooleanVar(value=roop.globals.skip_audio)
-    skip_audio_switch = ctk.CTkSwitch(root, text='Skip audio', variable=skip_audio_value, command=lambda: setattr(roop.globals, 'skip_audio', skip_audio_value.get()))
-    skip_audio_switch.place(relx=base_x2, rely=base_y)
-
-    many_faces_value = ctk.BooleanVar(value=roop.globals.many_faces)
-    many_faces_switch = ctk.CTkSwitch(root, text='Many faces', variable=many_faces_value, command=lambda: setattr(roop.globals, 'many_faces', many_faces_value.get()))
-    many_faces_switch.place(relx=base_x2, rely=0.68)
-
-    use_batch_value = ctk.BooleanVar(value=roop.globals.use_batch)
-    use_batch_switch = ctk.CTkSwitch(root, text='Batch process folder', variable=use_batch_value, command=lambda: setattr(roop.globals, 'use_batch', use_batch_value.get()))
-    use_batch_switch.place(relx=base_x1, rely=0.725)
-
-
-
-    base_y = 0.84
-  
-    start_button = ctk.CTkButton(root, text='Start', command=lambda: select_output_path(start))
-    start_button.place(relx=base_x1, rely=base_y, relwidth=0.15, relheight=0.05)
-
-    stop_button = ctk.CTkButton(root, text='Destroy', command=lambda: destroy())
-    stop_button.place(relx=0.35, rely=base_y, relwidth=0.15, relheight=0.05)
-
-    preview_button = ctk.CTkButton(root, text='Preview', command=lambda: toggle_preview())
-    preview_button.place(relx=0.55, rely=base_y, relwidth=0.15, relheight=0.05)
-
-    result_button = ctk.CTkButton(root, text='Show Result', command=lambda: show_result())
-    result_button.place(relx=0.75, rely=base_y, relwidth=0.15, relheight=0.05)
-
-    status_label = ctk.CTkLabel(root, text=None, justify='center')
-    status_label.place(relx=base_x1, rely=0.9, relwidth=0.8)
-
-    donate_label = ctk.CTkLabel(root, text='Visit the Github Page', justify='center', cursor='hand2')
-    donate_label.place(relx=0.1, rely=0.95, relwidth=0.8)
-    donate_label.configure(text_color=ctk.ThemeManager.theme.get('RoopDonate').get('text_color'))
-    donate_label.bind('<Button>', lambda event: webbrowser.open('https://github.com/C0untFloyd/roop-unleashed'))
-
-    return root
-
-def create_preview(parent) -> ctk.CTkToplevel:
-    global preview_label, preview_slider
-
-def create_preview(parent: ctk.CTkToplevel) -> ctk.CTkToplevel:
-    global preview_label, preview_slider
-
-    preview = ctk.CTkToplevel(parent)
-    preview.withdraw()
-    preview.title('Preview')
-    preview.configure()
-    preview.protocol('WM_DELETE_WINDOW', lambda: toggle_preview())
-    preview.resizable(width=False, height=False)
-
-    preview_label = ctk.CTkLabel(preview, text=None)
-    preview_label.pack(fill='both', expand=True)
-
-    preview_slider = ctk.CTkSlider(preview, from_=0, to=0, command=lambda frame_value: update_preview(frame_value))
-
-    return preview
-
-def update_status(text: str) -> None:
-    status_label.configure(text=text)
-    ROOT.update()
-
-def update_status(text: str) -> None:
-    status_label.configure(text=text)
-    ROOT.update()
-
-
-def select_source_path() -> None:
-    global RECENT_DIRECTORY_SOURCE, INPUT_FACES_DATA
-
-    PREVIEW.withdraw()
-    source_path = ctk.filedialog.askopenfilename(title='Select source image', initialdir=RECENT_DIRECTORY_SOURCE)
-    image = None
+    progress(0, desc="Retrieving faces from image", )      
+    source_path = imgsrc
+    thumbs = []
     if is_image(source_path):
         roop.globals.source_path = source_path
         RECENT_DIRECTORY_SOURCE = os.path.dirname(roop.globals.source_path)
-        INPUT_FACES_DATA = extract_face_images(roop.globals.source_path,  (False, 0))
-        if len(INPUT_FACES_DATA) > 0:
-            if len(INPUT_FACES_DATA) == 1:
-                image = render_face_from_frame(INPUT_FACES_DATA[0][1], (IMAGE_BUTTON_WIDTH, IMAGE_BUTTON_HEIGHT))
-                roop.globals.SELECTED_FACE_DATA_INPUT = INPUT_FACES_DATA[0][0]
-            else:
-                show_face_selection(INPUT_FACES_DATA, True)
-        else:
-            print('No face found!')
-            roop.globals.source_path = None
-    else:
-        roop.globals.source_path = None
-    source_button.configure(image=image)
-    source_button._draw()
-
-
-def select_target_path() -> None:
-    global RECENT_DIRECTORY_TARGET, OUTPUT_FACES_DATA
-
-    PREVIEW.withdraw()
-    target_path = ctk.filedialog.askopenfilename(title='Select target image or video', initialdir=RECENT_DIRECTORY_TARGET)
-    image = None
-    if is_image(target_path) and not target_path.lower().endswith(('gif')):
-        roop.globals.target_path = target_path
-        RECENT_DIRECTORY_TARGET = os.path.dirname(roop.globals.target_path)
-        if roop.globals.many_faces:
-            roop.globals.SELECTED_FACE_DATA_OUTPUT = None
-            image = render_image_preview(target_path, (IMAGE_BUTTON_WIDTH, IMAGE_BUTTON_HEIGHT))
-        else:
-            OUTPUT_FACES_DATA = extract_face_images(roop.globals.target_path, (False, 0))
-            if len(OUTPUT_FACES_DATA) > 0:
-                if len(OUTPUT_FACES_DATA) == 1:
-                    image = render_face_from_frame(OUTPUT_FACES_DATA[0][1], (IMAGE_BUTTON_WIDTH, IMAGE_BUTTON_HEIGHT))
-                    roop.globals.SELECTED_FACE_DATA_OUTPUT = OUTPUT_FACES_DATA[0][0]
-                    if roop.globals.SELECTED_FACE_DATA_INPUT is not None:
-                        emb1 = roop.globals.SELECTED_FACE_DATA_INPUT.embedding
-                        emb2 = roop.globals.SELECTED_FACE_DATA_OUTPUT.embedding
-                        dist = compute_cosine_distance(emb1, emb2)
-                        print(f'Similarity Distance between Source->Target={dist}')
-                else:
-                    show_face_selection(OUTPUT_FACES_DATA, False)
-            else:
-                print('No face found!')
-                roop.globals.target_path = None
-
-    elif is_video(target_path) or target_path.lower().endswith(('gif')):
-        roop.globals.target_path = target_path
-        RECENT_DIRECTORY_TARGET = os.path.dirname(roop.globals.target_path)
-        if roop.globals.many_faces:
-            roop.globals.SELECTED_FACE_DATA_OUTPUT = None
-            image = render_video_preview(target_path, (IMAGE_BUTTON_WIDTH, IMAGE_BUTTON_HEIGHT))
-        else:
-            max_frame = get_video_frame_total(roop.globals.target_path)
-            dialog = ctk.CTkInputDialog(text=f"Please input frame number with target face (1 - {max_frame})", title="Extract Face from Video")
-            selected_frame = dialog.get_input()
-            try:
-                selected_frame = int(selected_frame)
-            except:
-                selected_frame = 1
+        SELECTION_FACES_DATA = extract_face_images(roop.globals.source_path,  (False, 0))
+        progress(0.5, desc="Retrieving faces from image")      
+        for f in SELECTION_FACES_DATA:
+            image = convert_to_gradio(f[1])
+            thumbs.append(image)
             
-            selected_frame = max(selected_frame, 1)
-            selected_frame = min(selected_frame, max_frame)
-            OUTPUT_FACES_DATA = extract_face_images(roop.globals.target_path, (True, selected_frame))
-            if len(OUTPUT_FACES_DATA) > 0:
-                if len(OUTPUT_FACES_DATA) == 1:
-                    image = render_face_from_frame(OUTPUT_FACES_DATA[0][1], (IMAGE_BUTTON_WIDTH, IMAGE_BUTTON_HEIGHT))
-                    roop.globals.SELECTED_FACE_DATA_OUTPUT = OUTPUT_FACES_DATA[0][0]
-                else:
-                    show_face_selection(OUTPUT_FACES_DATA, False)
-            else:
-                roop.globals.target_path = None
-        
+    progress(1.0, desc="Retrieving faces from image")      
+    if len(thumbs) < 1:
+        raise gr.Error('No faces detected!')
+
+    if len(thumbs) == 1:
+        roop.globals.SELECTED_FACE_DATA_INPUT = SELECTION_FACES_DATA[0][0]
+        input_thumbs.append(thumbs[0])
+        return gr.Column.update(visible=False), None, input_thumbs
+       
+    return gr.Column.update(visible=True), thumbs, gr.Gallery.update(visible=True)
+#        bt_srcimg.change( inputs=bt_srcimg, outputs=[bt_srcimg, dynamic_face_selection, face_selection, input_faces])
+
+def on_select_input_face(evt: gr.SelectData):
+    global SELECTED_INPUT_FACE_INDEX
+
+    SELECTED_INPUT_FACE_INDEX = evt.index
+
+def remove_selected_input_face():
+    global input_thumbs
+
+    if len(input_thumbs) > SELECTED_INPUT_FACE_INDEX:
+        f = input_thumbs.pop(SELECTED_INPUT_FACE_INDEX)
+        del f
+
+    return input_thumbs
+
+def on_select_target_face(evt: gr.SelectData):
+    global SELECTED_TARGET_FACE_INDEX
+
+    SELECTED_TARGET_FACE_INDEX = evt.index
+
+def remove_selected_target_face():
+    global target_thumbs
+
+    if len(target_thumbs) > SELECTED_TARGET_FACE_INDEX:
+        f = target_thumbs.pop(SELECTED_TARGET_FACE_INDEX)
+        del f
+    return target_thumbs
+
+
+
+
+
+def on_use_face_from_selected(files, frame_num):
+    global IS_INPUT, SELECTION_FACES_DATA
+
+    IS_INPUT = False
+    thumbs = []
+    
+    roop.globals.target_path = files[selected_preview_index].name
+    if is_image(roop.globals.target_path) and not roop.globals.target_path.lower().endswith(('gif')):
+        SELECTION_FACES_DATA = extract_face_images(roop.globals.target_path,  (False, 0))
+        if len(SELECTION_FACES_DATA) > 0:
+            for f in SELECTION_FACES_DATA:
+                image = convert_to_gradio(f[1])
+                thumbs.append(image)
+        else:
+            gr.Info('No faces detected!')
+            roop.globals.target_path = None
+                
+    elif is_video(roop.globals.target_path) or roop.globals.target_path.lower().endswith(('gif')):
+        selected_frame = frame_num
+        SELECTION_FACES_DATA = extract_face_images(roop.globals.target_path, (True, selected_frame))
+        if len(SELECTION_FACES_DATA) > 0:
+            for f in SELECTION_FACES_DATA:
+                image = convert_to_gradio(f[1])
+                thumbs.append(image)
+        else:
+            gr.Info('No faces detected!')
+            roop.globals.target_path = None
+
+    if len(thumbs) == 1:
+        roop.globals.SELECTED_FACE_DATA_OUTPUT = SELECTION_FACES_DATA[0][0]
+        target_thumbs.append(thumbs[0])
+        return gr.Row.update(visible=False), None, target_thumbs
+
+    return gr.Row.update(visible=True), thumbs, gr.Gallery.update(visible=True)
+
+
+
+def on_select_face(evt: gr.SelectData):  # SelectData is a subclass of EventData
+    global SELECTED_FACE_INDEX
+    SELECTED_FACE_INDEX = evt.index
+    
+
+def on_selected_face():
+    global IS_INPUT, SELECTED_FACE_INDEX, SELECTION_FACES_DATA, input_thumbs, target_thumbs
+    
+    fd = SELECTION_FACES_DATA[SELECTED_FACE_INDEX]
+    image = convert_to_gradio(fd[1])
+    if IS_INPUT:
+        roop.globals.SELECTED_FACE_DATA_INPUT = fd[0]
+        input_thumbs.append(image)
+        return gr.Column.update(visible=False), None, input_thumbs, gr.Gallery.update(visible=True)
     else:
-        roop.globals.target_path = None
-
-    target_button.configure(image=image)
-    target_button._draw()
-
-
-
-def select_output_path(start):
-    global RECENT_DIRECTORY_OUTPUT
+        roop.globals.SELECTED_FACE_DATA_OUTPUT = fd[0]
+        target_thumbs.append(image)
+        return gr.Column.update(visible=False), None, gr.Gallery.update(visible=True), target_thumbs
+    
+#        bt_faceselect.click(fn=on_selected_face, outputs=[dynamic_face_selection, face_selection, input_faces, target_faces])
 
 
-def select_output_path(start: Callable[[], None]) -> None:
-    global RECENT_DIRECTORY_OUTPUT
 
-    if roop.globals.use_batch:
-        roop.globals.target_folder_path = ctk.filedialog.askdirectory(title='Select folder to batch process')
-        print(f'Batch process folder set to {roop.globals.target_folder_path}')
+
+def on_preview_frame_changed(frame_num, files):
+    filename = files[selected_preview_index].name
+    if is_video(filename) or filename.lower().endswith('gif'):
+        current_frame = get_video_frame(filename, frame_num)
     else:
-        roop.globals.target_folder_path = None
-
-
-    if roop.globals.target_folder_path is not None:
-        output_path = ctk.filedialog.askdirectory(title='Select output folder')
-    elif is_image(roop.globals.target_path) and has_extension(roop.globals.target_path, ['gif']) == False:
-        output_path = ctk.filedialog.asksaveasfilename(title='Save image output file', defaultextension='.png', initialfile='output.png', initialdir=RECENT_DIRECTORY_OUTPUT)
-    elif is_video(roop.globals.target_path) or has_extension(roop.globals.target_path, ['gif']) == True:
-        output_path = ctk.filedialog.asksaveasfilename(title='Save video output file', defaultextension='.mp4', initialfile='output.mp4', initialdir=RECENT_DIRECTORY_OUTPUT)
-    else:
-        output_path = None
-
-    if output_path:
-        roop.globals.output_path = output_path
-        RECENT_DIRECTORY_OUTPUT = os.path.dirname(roop.globals.output_path)
-        start()
-
-
-def select_enhancer(choice):
-    roop.globals.selected_enhancer = choice
-
-
-def show_result():
-    open_with_default_app(roop.globals.output_path)
+        current_frame = get_image_frame(filename)
+    return convert_to_gradio(current_frame)
+    
     
 
 
-def render_image_preview(image_path: str, size: Tuple[int, int]) -> ctk.CTkImage:
-    image = Image.open(image_path)
-    if size:
-        image = ImageOps.fit(image, size, Image.LANCZOS)
-    return ctk.CTkImage(image, size=image.size)
+def on_clear_input_faces():
+    global input_thumbs
+    
+    input_thumbs = []
+    roop.globals.SELECTED_FACE_DATA_INPUT = None
+    return input_thumbs
+
+def on_clear_destfiles():
+    global target_thumbs
+
+    roop.globals.SELECTED_FACE_DATA_OUTPUT = None
+    target_thumbs = []
+    return target_thumbs    
 
 
-def render_face_from_frame(face, size: Tuple[int, int] = None) -> ctk.CTkImage:
-    image = Image.fromarray(cv2.cvtColor(face, cv2.COLOR_BGR2RGB))
-    image = ImageOps.fit(image, (IMAGE_BUTTON_WIDTH, IMAGE_BUTTON_HEIGHT), Image.LANCZOS)
-    return ctk.CTkImage(image, size=image.size)
+
+def translate_swap_mode(dropdown_text):
+    if dropdown_text == "Selected face":
+        return "selected"
+    elif dropdown_text == "First found":
+        return "first"
+    elif dropdown_text == "All female":
+        return "all_female"
+    elif dropdown_text == "All male":
+        return "all_male"
+    
+    return "all"
+        
 
 
-def render_video_preview(video_path: str, size: Tuple[int, int], frame_number: int = 0) -> ctk.CTkImage:
-    capture = cv2.VideoCapture(video_path)
-    if frame_number:
-        capture.set(cv2.CAP_PROP_POS_FRAMES, frame_number)
-    has_frame, frame = capture.read()
-    if has_frame:
-        image = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-        if size:
-            image = ImageOps.fit(image, size, Image.LANCZOS)
-        return ctk.CTkImage(image, size=image.size)
-    capture.release()
-    cv2.destroyAllWindows()
+def start_swap(enhancer, detection, keep_fps, keep_frames, skip_audio, face_distance, blend_ratio, target_files, use_clip, clip_text):
+    from roop.core import batch_process
+
+    if len(target_files) <= 0:
+        return None, None
+    
+    shutil.rmtree(roop.globals.output_path)
+    prepare_environment()
 
 
-def toggle_preview() -> None:
-    if PREVIEW.state() == 'normal':
-        PREVIEW.withdraw()
-    elif roop.globals.source_path and roop.globals.target_path:
-        init_preview()
-        update_preview()
-        PREVIEW.deiconify()
+    roop.globals.selected_enhancer = enhancer
+    roop.globals.target_path = None
+    roop.globals.max_face_distance = face_distance
+    roop.globals.blend_ratio = blend_ratio
+    roop.globals.keep_fps = keep_fps
+    roop.globals.keep_frames = keep_frames
+    roop.globals.face_swap_mode = translate_swap_mode(detection)
+    if use_clip and clip_text is None or len(clip_text) < 1:
+        use_clip = False
+    
+    batch_process([file.name for file in target_files], use_clip, clip_text)
+    outdir = pathlib.Path(roop.globals.output_path)
+    outfiles = [item for item in outdir.iterdir() if item.is_file()]
+    if len(outfiles) > 0:
+        return outfiles, outfiles[0]
+    return None, None
 
+def start_preview(frame_num, enhancer, detection, face_distance, blend_ratio, target_files, use_clip, clip_text):
+    from roop.core import live_swap
 
-def init_preview() -> None:
-    if is_image(roop.globals.target_path):
-        preview_slider.pack_forget()
-    if is_video(roop.globals.target_path):
-        video_frame_total = get_video_frame_total(roop.globals.target_path)
-        preview_slider.configure(to=video_frame_total)
-        preview_slider.pack(fill='x')
-        preview_slider.set(0)
+    roop.globals.face_swap_mode = translate_swap_mode(detection)
+    roop.globals.selected_enhancer = enhancer
+    roop.globals.max_face_distance = face_distance
+    roop.globals.blend_ratio = blend_ratio
+    
 
+    filename = target_files[selected_preview_index].name
+    if is_video(filename) or filename.lower().endswith('gif'):
+        current_frame = get_video_frame(filename, frame_num)
+    elif is_image(filename):
+        current_frame = get_image_frame(filename)
+    if current_frame is None:
+        return None 
 
-def update_preview(frame_number: int = 0) -> None:
-    if roop.globals.source_path and roop.globals.target_path:
-        temp_frame = get_video_frame(roop.globals.target_path, frame_number)
+    if use_clip and clip_text is None or len(clip_text) < 1:
+        use_clip = False
+        
 
-        for frame_processor in get_frame_processors_modules(roop.globals.frame_processors):
-            if frame_processor.NAME == 'ROOP.FACE-ENHANCER':
-                continue
+    if roop.globals.SELECTED_FACE_DATA_INPUT is not None:
+        current_frame = live_swap(current_frame, roop.globals.face_swap_mode, use_clip, clip_text)
 
-            temp_frame = frame_processor.process_frame(source_face=roop.globals.SELECTED_FACE_DATA_INPUT, target_face=roop.globals.SELECTED_FACE_DATA_OUTPUT, temp_frame=temp_frame)
-            image = Image.fromarray(cv2.cvtColor(temp_frame, cv2.COLOR_BGR2RGB))
-            image = ImageOps.contain(image, (PREVIEW_MAX_WIDTH, PREVIEW_MAX_HEIGHT), Image.LANCZOS)
-            image = ctk.CTkImage(image, size=image.size)
-            preview_label.configure(image=image)
+    return convert_to_gradio(current_frame)
+   
+    
+def on_destfiles_selected(evt: gr.SelectData, target_files):
+    global selected_preview_index
 
-
-def create_select_faces_win(parent) -> ctk.CTkToplevel:
-    global scrollable_frame
-
-    face_win = ctk.CTkToplevel(parent)
-    face_win.minsize(800, 400)
-    face_win.title('Select Face(s)')
-    face_win.configure()
-    face_win.withdraw()
-    face_win.protocol('WM_DELETE_WINDOW', lambda: cancel_face_selection())
-    scrollable_frame = ctk.CTkScrollableFrame(face_win, orientation='horizontal', label_text='Choose face by clicking on it', width=(IMAGE_BUTTON_WIDTH + 40)*3, height=IMAGE_BUTTON_HEIGHT+32)
-    scrollable_frame.grid(row=0, column=0, padx=20, pady=20)
-    scrollable_frame.place(relx=0.05, rely=0.05)
-    cancel_button = ctk.CTkButton(face_win, text='Cancel', command=lambda: cancel_face_selection())
-    cancel_button.place(relx=0.05, rely=0.85, relwidth=0.075, relheight=0.075)
-
-    return face_win
-
-def cancel_face_selection() -> None:
-    toggle_face_selection();
-    ROOT.wm_attributes('-disabled', False)
-    ROOT.focus()
-
-def select_face(index, is_input) -> None:
-    global source_button, target_button, INPUT_FACES_DATA, OUTPUT_FACES_DATA
-
-    if is_input:
-        roop.globals.SELECTED_FACE_DATA_INPUT = INPUT_FACES_DATA[index][0]
-        image = render_face_from_frame(INPUT_FACES_DATA[index][1], (IMAGE_BUTTON_WIDTH, IMAGE_BUTTON_HEIGHT))
-        source_button.configure(image=image)
-        source_button._draw()
+    selected_preview_index = evt.index
+    filename = target_files[selected_preview_index].name
+    if is_video(filename) or filename.lower().endswith('gif'):
+        current_frame = get_video_frame(filename, 0)
+        total_frames = get_video_frame_total(filename)
     else:
-        roop.globals.SELECTED_FACE_DATA_OUTPUT = OUTPUT_FACES_DATA[index][0]
-        image = render_face_from_frame(OUTPUT_FACES_DATA[index][1], (IMAGE_BUTTON_WIDTH, IMAGE_BUTTON_HEIGHT))
-        target_button.configure(image=image)
-        target_button._draw()
-        if roop.globals.SELECTED_FACE_DATA_INPUT is not None:
-            emb1 = roop.globals.SELECTED_FACE_DATA_INPUT.embedding
-            emb2 = roop.globals.SELECTED_FACE_DATA_OUTPUT.embedding
-            dist = compute_cosine_distance(emb1, emb2)
-            print(f'Similarity Distance between Source->Target={dist}')
+        current_frame = get_image_frame(filename)
+        total_frames = 0
+    
+    current_frame = convert_to_gradio(current_frame)
+    return current_frame, gr.Slider.update(value=0, maximum=total_frames)
+    
 
-    toggle_face_selection();
-    ROOT.wm_attributes('-disabled', False)
-    ROOT.focus()
-
-
-
-def toggle_face_selection() -> None:
-    if FACE_SELECT.state() == 'normal':
-        FACE_SELECT.withdraw()
+def on_resultfiles_selected(evt: gr.SelectData, files):
+    selected_index = evt.index
+    filename = files[selected_index].name
+    if is_video(filename) or filename.lower().endswith('gif'):
+        current_frame = get_video_frame(filename, 0)
     else:
-        FACE_SELECT.deiconify()
+        current_frame = get_image_frame(filename)
+    return convert_to_gradio(current_frame)
+
+    
+        
+def on_cam_toggle(state):
+    global live_cam_active, restart_server
+
+    live_cam_active = state
+    gr.Warning('Server will be restarted for this change!')
+    restart_server = True
 
 
-def show_face_selection(faces, is_input):
-    global FACE_BUTTONS, scrollable_frame
+def on_stream_swap_cam(camimage, enhancer, blend_ratio):
+    from roop.core import live_swap
+    global current_cam_image, cam_counter, cam_swapping, fake_cam_image
 
-    ROOT.wm_attributes('-disabled', True)
+    roop.globals.selected_enhancer = enhancer
+    roop.globals.blend_ratio = blend_ratio
 
-    if len(FACE_BUTTONS) > 0:
-        for b in FACE_BUTTONS:
-            try:
-                # b.place_forget()
-                b.destroy()
-            except:
-                continue
-        FACE_BUTTONS.clear()
+    if not cam_swapping and roop.globals.SELECTED_FACE_DATA_INPUT is not None:
+        cam_swapping = True
+        current_cam_image = live_swap(camimage, "all")
+        cam_swapping = False
+    
+    return current_cam_image
 
-    i = 0
-    for face in faces:
-        image = render_face_from_frame(face[1], (128, 128))
-        score = face[0]['det_score']
-        age = face[0]['age']
-        button_text = f'Score: {score} - Sex: {face[0].sex} - Age: {age}'
-        face_button = ctk.CTkButton(scrollable_frame, text=button_text, width=128, height=128, compound='top', anchor='center', command=lambda faceindex=i: select_face(index=faceindex, is_input=is_input))
-        face_button.grid(row=0, column=i, pady=5, padx=5)
-        face_button.configure(image=image)
-        face_button._draw()
-        FACE_BUTTONS.append(face_button)
-        i += 1
 
-    FACE_SELECT.deiconify()
+def on_create_gif(files):
+    for tf in files:
+        f = tf.name
+        gifname = get_destfilename_from_path(f, './output', '.gif')
+        create_gif_from_video(f, gifname)
+    
+    return gr.File.update(visible=True)
+
+
+def clean_temp():
+    shutil.rmtree(os.environ["TEMP"])
+    prepare_environment()
+
+
+def apply_settings(themes, input_server_name, input_server_port, input_server_public):
+    settings.selected_theme = themes
+    settings.server_name = input_server_name
+    settings.server_port = input_server_port
+    settings.server_share = input_server_public
+    settings.save()
+
+def restart():
+    global restart_server
+    restart_server = True
+
+
+
+
+# Gradio wants Images in RGB
+def convert_to_gradio(image):
+    return cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+
 

@@ -1,0 +1,6 @@
+{
+    "default_chain": "faceswap",
+    "init_on_start": "faceswap,gfpgan,codeformer",
+    "is_demo_row_render": false,
+    "v": "2.0"
+}

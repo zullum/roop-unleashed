@@ -22,7 +22,14 @@ execution_threads = None
 headless = None
 log_level = 'error'
 selected_enhancer = None
+face_swap_mode = None
+
 FACE_ENHANCER = None
 
 SELECTED_FACE_DATA_INPUT = None
 SELECTED_FACE_DATA_OUTPUT = None
+
+IMAGE_CHAIN_PROCESSOR = None
+VIDEO_CHAIN_PROCESSOR = None
+BATCH_IMAGE_CHAIN_PROCESSOR = None
+
