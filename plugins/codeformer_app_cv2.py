@@ -89,7 +89,7 @@ def set_realesrgan():
     return upsampler
 
 
-upsampler = set_realesrgan()
+# upsampler = set_realesrgan()
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 codeformers_cache = []

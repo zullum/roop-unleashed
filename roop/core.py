@@ -18,6 +18,7 @@ import onnxruntime
 import roop.globals
 import roop.metadata
 import roop.ui as ui
+from settings import Settings
 from roop.utilities import has_image_extension, is_image, is_video, detect_fps, create_video, extract_frames, create_gif_from_video, get_temp_frame_paths, restore_audio, create_temp, move_temp, clean_temp, normalize_output_path, has_extension, get_destfilename_from_path, resolve_relative_path, conditional_download
 from roop.face_helper import extract_face_images
 from chain_img_processor import ChainImgProcessor, ChainVideoProcessor, ChainBatchImageProcessor
@@ -248,10 +249,10 @@ def batch_process(files, use_clip, new_clip_text) -> None:
             fullname = f
         if has_image_extension(fullname):
             imagefiles.append(fullname)
-            imagefinalnames.append(get_destfilename_from_path(fullname, roop.globals.output_path, '_fake.png'))
+            imagefinalnames.append(get_destfilename_from_path(fullname, roop.globals.output_path, f'_fake.{roop.globals.CFG.output_image_format}'))
         elif is_video(fullname) or has_extension(fullname, ['gif']):
             videofiles.append(fullname)
-            videofinalnames.append(get_destfilename_from_path(fullname, roop.globals.output_path, '_fake.mp4'))
+            videofinalnames.append(get_destfilename_from_path(fullname, roop.globals.output_path, f'_fake.{roop.globals.CFG.output_video_format}'))
 
     processors = "faceswap"
     if use_clip:
@@ -302,6 +303,7 @@ def run() -> None:
     if not pre_check():
         return
     limit_resources()
+    roop.globals.CFG = Settings('config.yaml')
     if roop.globals.headless:
         start()
     else:

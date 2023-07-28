@@ -65,7 +65,7 @@ class ChainBatchImageProcessor(ChainImgProcessor):
                     cv2.imwrite(target_files[i], resimg)
             if update:
                 update()
-           
+
 
     def run_batch_chain(self, source_files, target_files, threads:int = 1, chain = None, params_frame_gen_func = None):
         self.chain = chain
@@ -79,7 +79,7 @@ class ChainBatchImageProcessor(ChainImgProcessor):
                 queue = create_queue(source_files)
                 queue_per_future = max(len(source_files) // threads, 1)
                 while not queue.empty():
-                    future = executor.submit(self.process_frames, source_files, target_files, pick_queue(queue, queue_per_future), self.update_progress(progress))
+                    future = executor.submit(self.process_frames, source_files, target_files, pick_queue(queue, queue_per_future), lambda: self.update_progress(progress))
                     futures.append(future)
                 for future in as_completed(futures):
                     future.result()

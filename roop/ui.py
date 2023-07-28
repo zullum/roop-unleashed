@@ -30,6 +30,9 @@ target_thumbs = []
 IS_INPUT = True
 SELECTED_FACE_INDEX = 0
 
+SELECTED_INPUT_FACE_INDEX = 0
+SELECTED_TARGET_FACE_INDEX = 0
+
 roop.globals.keep_fps = None
 roop.globals.keep_frames = None
 roop.globals.skip_audio = None
@@ -45,7 +48,6 @@ cam_swapping = False
 
 selected_preview_index = 0
 
-settings = Settings('config.yaml')
 
 def prepare_environment():
     roop.globals.output_path = os.path.abspath(os.path.join(os.getcwd(), "output"))
@@ -56,15 +58,18 @@ def prepare_environment():
 
 
 def run():
-    global input_faces, target_faces, face_selection, fake_cam_image, restart_server, live_cam_active, settings
+    global input_faces, target_faces, face_selection, fake_cam_image, restart_server, live_cam_active
 
     prepare_environment()
 
     available_themes = ["Default", "gradio/glass", "gradio/monochrome", "gradio/seafoam", "gradio/soft", "gstaff/xkcd", "freddyaboulton/dracula_revamped", "ysharma/steampunk"]
-    server_name = settings.server_name
+    image_formats = ['jpg','png', 'webp']
+    video_formats = ['avi','mkv', 'mp4', 'webm']
+
+    server_name = roop.globals.CFG.server_name
     if server_name is None or len(server_name) < 1:
         server_name = None
-    server_port = settings.server_port
+    server_port = roop.globals.CFG.server_port
     if server_port <= 0:
         server_port = None
 
@@ -74,7 +79,7 @@ def run():
 
     while run_server:
 
-        with gr.Blocks(title=f'{roop.metadata.name} {roop.metadata.version}', theme=settings.selected_theme, css="span {color: var(--block-info-text-color)}") as ui:
+        with gr.Blocks(title=f'{roop.metadata.name} {roop.metadata.version}', theme=roop.globals.CFG.selected_theme, css="span {color: var(--block-info-text-color)}") as ui:
             with gr.Row(variant='panel'):
                     gr.Markdown(f"### [{roop.metadata.name} {roop.metadata.version}](https://github.com/C0untFloyd/roop-unleashed)")
                     gr.HTML(create_version_html(), elem_id="versions")
@@ -154,24 +159,38 @@ def run():
                 with gr.Row(variant='panel'):
                     with gr.Accordion(label="Video/GIF", open=False):
                         gr.Markdown("Extract frames from video")
-                        gr.Button("Start").click(fn=lambda: gr.Info('Not yet implemented...'))
-                        gr.Markdown("Create video from files")
+                        start_extract_frames = gr.Button("Start")
+                        gr.Markdown("Create video from image files")
                         gr.Button("Start").click(fn=lambda: gr.Info('Not yet implemented...'))
                         gr.Markdown("Create GIF from video")
                         start_create_gif = gr.Button("Create GIF")
+                with gr.Row():
+                    extra_files_output = gr.Files(label='Resulting output files', file_count="multiple")
                         
             
             with gr.Tab("Settings"):
                 with gr.Row():
-                    themes = gr.Dropdown(available_themes, label="Theme", info="Change needs complete restart", value=settings.selected_theme)
+                    with gr.Column():
+                        themes = gr.Dropdown(available_themes, label="Theme", info="Change needs complete restart", value=roop.globals.CFG.selected_theme)
+                    with gr.Column():
+                        share_checkbox = gr.Checkbox(label="Public Server", value=roop.globals.CFG.server_share)
+                        button_clean_temp = gr.Button("Clean temp folder")
+                    with gr.Column():
+                        input_server_name = gr.Textbox(label="Server Name", lines=1, info="Leave blank to run locally", value=roop.globals.CFG.server_name)
+                    with gr.Column():
+                        input_server_port = gr.Number(label="Server Port", precision=0, info="Leave at 0 to use default", value=roop.globals.CFG.server_port)
                 with gr.Row():
-                    input_server_name = gr.Textbox(label="Server Name", lines=1, info="Leave blank to run locally", value=settings.server_name)
-                    input_server_port = gr.Number(label="Server Port", precision=0, info="Leave at 0 to use default", value=settings.server_port)
-                    share_checkbox = gr.Checkbox(label="Public Server", value=settings.server_share)
+                    with gr.Column():
+                        selected_image_format = gr.Dropdown(image_formats, label="Image Output Format", value=roop.globals.CFG.output_image_format)
+                    with gr.Column():
+                        selected_video_format = gr.Dropdown(video_formats, label="Video Output Format", value=roop.globals.CFG.output_video_format)
+                    with gr.Column():
+                        gr.Markdown(' ')
+                    
                 with gr.Row():
                     button_apply_settings = gr.Button("Apply Settings")
-                    button_clean_temp = gr.Button("Clean temp folder")
                     button_apply_restart = gr.Button("Restart Server")
+                    gr.Markdown(' ')
 
             input_faces.select(on_select_input_face, None, None)
             bt_remove_selected_input_face.click(fn=remove_selected_input_face, outputs=[input_faces])
@@ -204,18 +223,19 @@ def run():
                 cam.stream(on_stream_swap_cam, inputs=[cam, selected_enhancer, blend_ratio], outputs=[fake_cam_image], show_progress="hidden")
 
             # Extras
-            start_create_gif.click(fn=on_create_gif, inputs=[files_to_process], outputs=[files_to_process])
+            start_extract_frames.click(fn=on_extract_frames, inputs=[files_to_process], outputs=[files_to_process, extra_files_output])
+            start_create_gif.click(fn=on_create_gif, inputs=[files_to_process], outputs=[files_to_process, extra_files_output])
 
             # Settings
-            button_clean_temp.click(fn=clean_temp)
-            button_apply_settings.click(apply_settings, inputs=[themes, input_server_name, input_server_port, share_checkbox])
+            button_clean_temp.click(fn=clean_temp, outputs=[bt_srcimg, input_faces, target_faces, bt_destfiles])
+            button_apply_settings.click(apply_settings, inputs=[themes, input_server_name, input_server_port, share_checkbox, selected_image_format, selected_video_format])
             button_apply_restart.click(restart)
 
 
 
         restart_server = False
         try:
-            ui.queue().launch(inbrowser=True, server_name=server_name, server_port=server_port, share=settings.server_share, prevent_thread_lock=True)
+            ui.queue().launch(inbrowser=True, server_name=server_name, server_port=server_port, share=roop.globals.CFG.server_share, prevent_thread_lock=True, show_error=True)
         except:
             restart_server = True
             run_server = False
@@ -269,7 +289,7 @@ def on_select_input_face(evt: gr.SelectData):
     SELECTED_INPUT_FACE_INDEX = evt.index
 
 def remove_selected_input_face():
-    global input_thumbs
+    global input_thumbs, SELECTED_INPUT_FACE_INDEX
 
     if len(input_thumbs) > SELECTED_INPUT_FACE_INDEX:
         f = input_thumbs.pop(SELECTED_INPUT_FACE_INDEX)
@@ -283,7 +303,7 @@ def on_select_target_face(evt: gr.SelectData):
     SELECTED_TARGET_FACE_INDEX = evt.index
 
 def remove_selected_target_face():
-    global target_thumbs
+    global target_thumbs, SELECTED_TARGET_FACE_INDEX
 
     if len(target_thumbs) > SELECTED_TARGET_FACE_INDEX:
         f = target_thumbs.pop(SELECTED_TARGET_FACE_INDEX)
@@ -500,26 +520,53 @@ def on_stream_swap_cam(camimage, enhancer, blend_ratio):
     return current_cam_image
 
 
+def on_extract_frames(files):
+    resultfiles = []
+    for tf in files:
+        f = tf.name
+        resfolder = roop.utilities.extract_frames(f)
+        for file in os.listdir(resfolder):
+            outfile = os.path.join(resfolder, file)
+            if os.path.isfile(outfile):
+                resultfiles.append(outfile)
+    return None, resultfiles
+
+
 def on_create_gif(files):
     for tf in files:
         f = tf.name
         gifname = get_destfilename_from_path(f, './output', '.gif')
         create_gif_from_video(f, gifname)
     
-    return gr.File.update(visible=True)
+    return None, gifname
+
+
+
 
 
 def clean_temp():
+    global input_thumbs, target_thumbs
+    
     shutil.rmtree(os.environ["TEMP"])
     prepare_environment()
+   
+    input_thumbs = []
+    roop.globals.SELECTED_FACE_DATA_INPUT = None
+    roop.globals.SELECTED_FACE_DATA_OUTPUT = None
+    target_thumbs = []
+    gr.Info('Temp Files removed')
+    return None,None,None,None
 
 
-def apply_settings(themes, input_server_name, input_server_port, input_server_public):
-    settings.selected_theme = themes
-    settings.server_name = input_server_name
-    settings.server_port = input_server_port
-    settings.server_share = input_server_public
-    settings.save()
+def apply_settings(themes, input_server_name, input_server_port, input_server_public, selected_image_format, selected_video_format):
+    roop.globals.CFG.selected_theme = themes
+    roop.globals.CFG.server_name = input_server_name
+    roop.globals.CFG.server_port = input_server_port
+    roop.globals.CFG.server_share = input_server_public
+    roop.globals.CFG.output_image_format = selected_image_format
+    roop.globals.CFG.output_video_format = selected_video_format
+    roop.globals.CFG.save()
+    gr.Info('Settings saved')
 
 def restart():
     global restart_server

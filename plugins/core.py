@@ -10,7 +10,7 @@ def start(core:ChainImgProcessor):
         "version": "2.0",
 
         "default_options": {
-            "default_chain": "faceswap,txt2clip", # default chain to run
+            "default_chain": "faceswap", # default chain to run
             "init_on_start": "faceswap,txt2clip,gfpgan,codeformer", # init these processors on start
             "is_demo_row_render": False,
         },
