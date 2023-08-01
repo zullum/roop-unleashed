@@ -3,4 +3,4 @@ output_video_format: mp4
 selected_theme: gstaff/xkcd
 server_name: ''
 server_port: 0
-server_share: false
+server_share: true
