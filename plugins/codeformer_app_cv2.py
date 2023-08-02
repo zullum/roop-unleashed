@@ -54,10 +54,10 @@ if not os.path.exists("models/CodeFormer/facelib/parsing_parsenet.pth"):
     load_file_from_url(
         url=pretrain_model_url["parsing"], model_dir="models/CodeFormer/facelib", progress=True, file_name=None
     )
-# if not os.path.exists("models/CodeFormer/realesrgan/RealESRGAN_x2plus.pth"):
-#     load_file_from_url(
-#         url=pretrain_model_url["realesrgan"], model_dir="models/CodeFormer/realesrgan", progress=True, file_name=None
-#     )
+if not os.path.exists("models/CodeFormer/realesrgan/RealESRGAN_x2plus.pth"):
+    load_file_from_url(
+        url=pretrain_model_url["realesrgan"], model_dir="models/CodeFormer/realesrgan", progress=True, file_name=None
+    )
 
 
 def imread(img_path):
@@ -89,7 +89,7 @@ def set_realesrgan():
     return upsampler
 
 
-# upsampler = set_realesrgan()
+upsampler = set_realesrgan()
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 codeformers_cache = []

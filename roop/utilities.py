@@ -71,16 +71,13 @@ def create_gif_from_video(video_path: str, gif_path):
     run_ffmpeg(['-i', video_path, '-vf', f'fps={fps},scale={frame.shape[0]}:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse', '-loop', '0', gif_path])
 
 
-def restore_audio(target_path: str, output_path: str) -> None:
-    temp_output_path = get_temp_output_path(target_path)
-    done = run_ffmpeg(['-i', temp_output_path, '-i', target_path, '-c:v', 'copy', '-map', '0:v:0', '-map', '1:a:0', '-y', output_path])
-    if not done:
-        move_temp(target_path, output_path)
+def restore_audio(intermediate_video: str, original_video: str, final_video: str) -> None:
+    run_ffmpeg(['-i', intermediate_video, '-i', original_video, '-c:v', 'copy', '-map', '0:v:0', '-map', '1:a:0', '-y', final_video])
 
 
 def get_temp_frame_paths(target_path: str) -> List[str]:
     temp_directory_path = get_temp_directory_path(target_path)
-    return glob.glob((os.path.join(glob.escape(temp_directory_path), '*.png')))
+    return glob.glob((os.path.join(glob.escape(temp_directory_path), f'*.{roop.globals.CFG.output_image_format}')))
 
 
 def get_temp_directory_path(target_path: str) -> str:

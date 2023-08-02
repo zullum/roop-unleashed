@@ -19,7 +19,7 @@ import roop.globals
 import roop.metadata
 import roop.ui as ui
 from settings import Settings
-from roop.utilities import has_image_extension, is_image, is_video, detect_fps, create_video, extract_frames, create_gif_from_video, get_temp_frame_paths, restore_audio, create_temp, move_temp, clean_temp, normalize_output_path, has_extension, get_destfilename_from_path, resolve_relative_path, conditional_download
+from roop.utilities import has_image_extension, is_video, detect_fps, create_video, extract_frames, create_gif_from_video, get_temp_frame_paths, restore_audio, create_temp, clean_temp, normalize_output_path, has_extension, get_destfilename_from_path, resolve_relative_path, conditional_download
 from roop.face_helper import extract_face_images
 from chain_img_processor import ChainImgProcessor, ChainVideoProcessor, ChainBatchImageProcessor
 
@@ -149,8 +149,8 @@ def pre_check() -> bool:
     download_directory_path = resolve_relative_path('../models/CodeFormer/facelib')
     conditional_download(download_directory_path, ['https://github.com/sczhou/CodeFormer/releases/download/v0.1.0/detection_Resnet50_Final.pth'])
     conditional_download(download_directory_path, ['https://github.com/sczhou/CodeFormer/releases/download/v0.1.0/parsing_parsenet.pth'])
-    # download_directory_path = resolve_relative_path('../models/CodeFormer')
-    # conditional_download(download_directory_path, ['https://github.com/sczhou/CodeFormer/releases/download/v0.1.0/RealESRGAN_x2plus.pth'])
+    download_directory_path = resolve_relative_path('../models/CodeFormer/realesrgan')
+    conditional_download(download_directory_path, ['https://github.com/sczhou/CodeFormer/releases/download/v0.1.0/RealESRGAN_x2plus.pth'])
 
     if not shutil.which('ffmpeg'):
        update_status('ffmpeg is not installed.')
@@ -203,6 +203,7 @@ def live_swap(frame, swap_mode, use_clip, clip_text):
     temp_frame, _ = roop.globals.IMAGE_CHAIN_PROCESSOR.run_chain(frame,  
                                                     {"swap_mode": swap_mode,
                                                         "original_frame": frame,
+                                                        "face_distance_threshold": roop.globals.distance_threshold,
                                                         "input_face_datas": [roop.globals.SELECTED_FACE_DATA_INPUT], "target_face_datas": [roop.globals.SELECTED_FACE_DATA_OUTPUT],
                                                         "clip_prompt": clip_text},
                                                         processors)
@@ -213,7 +214,8 @@ def live_swap(frame, swap_mode, use_clip, clip_text):
 def params_gen_func(proc, frame):
     global clip_text
 
-    return {"original_frame": frame, "blend_ratio": 0.5, "swap_mode": roop.globals.face_swap_mode,
+    return {"original_frame": frame, "blend_ratio": roop.globals.blend_ratio,
+             "swap_mode": roop.globals.face_swap_mode, "face_distance_threshold": roop.globals.distance_threshold, 
              "input_face_datas": [roop.globals.SELECTED_FACE_DATA_INPUT], "target_face_datas": [roop.globals.SELECTED_FACE_DATA_OUTPUT],
              "clip_prompt": clip_text}
 
@@ -281,11 +283,18 @@ def batch_process(files, use_clip, new_clip_text) -> None:
             else:
                 update_status(f'Creating video with {fps} FPS...')
                 roop.globals.VIDEO_CHAIN_PROCESSOR.run_video_chain(v,videofinalnames[index], fps, 8, processors, params_gen_func, roop.globals.target_path)
-            if os.path.isfile(videofinalnames[index]) and has_extension(v, ['gif']):
-                gifname = get_destfilename_from_path(v, './output', '_fake.gif')
-                update_status('Creating final GIF')
-                create_gif_from_video(videofinalnames[index], gifname)
-
+            if os.path.isfile(videofinalnames[index]):
+                if has_extension(v, ['gif']):
+                    gifname = get_destfilename_from_path(v, './output', '_fake.gif')
+                    update_status('Creating final GIF')
+                    create_gif_from_video(videofinalnames[index], gifname)
+                elif not roop.globals.skip_audio:
+                    finalname = get_destfilename_from_path(videofinalnames[index], roop.globals.output_path, f'_final.{roop.globals.CFG.output_video_format}')
+                    restore_audio(videofinalnames[index], v, finalname)
+                    if os.path.isfile(videofinalnames[index]):
+                        os.remove(videofinalnames[index])
+            else:
+                update_status('Failed!')
 
             
     update_status('Finished')

@@ -5,24 +5,31 @@ class Settings:
         self.config_file = config_file
         self.load()
 
+    def default_get(_, data, name, default):
+        value = default
+        try:
+            value = data.get(name, default)
+        except:
+            pass
+        return value
+
+
     def load(self):
         try:
             with open(self.config_file, 'r') as f:
                 data = yaml.load(f, Loader=yaml.FullLoader)
-            self.selected_theme = data.get('selected_theme', "gstaff/xkcd")
-            self.server_name = data.get('server_name', "")
-            self.server_port = data.get('server_port', 0)
-            self.server_share = data.get('server_share', False)
-            self.output_image_format = data.get('output_image_format', 'png')
-            self.output_video_format = data.get('output_video_format', 'mp4')
-
         except:
-            self.selected_theme = "gstaff/xkcd"
-            self.server_name = None
-            self.server_port = 0
-            self.server_share = False
-            self.output_image_format = 'png'
-            self.output_video_format = 'mp4'
+            pass
+
+        self.selected_theme = self.default_get(data, 'selected_theme', "gstaff/xkcd")
+        self.server_name = self.default_get(data, 'server_name', "")
+        self.server_port = self.default_get(data, 'server_port', 0)
+        self.server_share = self.default_get(data, 'server_share', False)
+        self.output_image_format = self.default_get(data, 'output_image_format', 'png')
+        self.output_video_format = self.default_get(data, 'output_video_format', 'mp4')
+        self.clear_output = self.default_get(data, 'clear_output', True)
+
+
 
     def save(self):
         data = {
@@ -31,7 +38,8 @@ class Settings:
             'server_port': self.server_port,
             'server_share': self.server_share,
             'output_image_format' : self.output_image_format,
-            'output_video_format' : self.output_video_format
+            'output_video_format' : self.output_video_format,
+            'clear_output' : self.clear_output
         }
         with open(self.config_file, 'w') as f:
             yaml.dump(data, f)

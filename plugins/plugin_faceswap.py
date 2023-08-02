@@ -52,6 +52,8 @@ class Faceswap(ChainImgPlugin):
             if(len(faces) < 1):
                 params["face_detected"] = False
                 return frame
+            
+            dist_threshold = params["face_distance_threshold"]
 
             if params["swap_mode"] == "all":
                 for sf in params["input_face_datas"]:
@@ -62,7 +64,7 @@ class Faceswap(ChainImgPlugin):
             elif params["swap_mode"] == "selected":
                 for i,tf in enumerate(params["target_face_datas"]):
                     for face in faces:
-                        if compute_cosine_distance(tf.embedding, face.embedding) <= 0.65:
+                        if compute_cosine_distance(tf.embedding, face.embedding) <= dist_threshold:
                             temp_frame = swap_face(params["input_face_datas"][i], face, temp_frame)
                             break
 

@@ -186,7 +186,9 @@ def run():
                         selected_video_format = gr.Dropdown(video_formats, label="Video Output Format", value=roop.globals.CFG.output_video_format)
                     with gr.Column():
                         gr.Markdown(' ')
-                    
+                with gr.Row():
+                    with gr.Column():
+                        clear_output = gr.Checkbox(label='Clear output folder before each run', value=roop.globals.CFG.output_image_format)
                 with gr.Row():
                     button_apply_settings = gr.Button("Apply Settings")
                     button_apply_restart = gr.Button("Restart Server")
@@ -228,7 +230,7 @@ def run():
 
             # Settings
             button_clean_temp.click(fn=clean_temp, outputs=[bt_srcimg, input_faces, target_faces, bt_destfiles])
-            button_apply_settings.click(apply_settings, inputs=[themes, input_server_name, input_server_port, share_checkbox, selected_image_format, selected_video_format])
+            button_apply_settings.click(apply_settings, inputs=[themes, input_server_name, input_server_port, share_checkbox, selected_image_format, selected_video_format, clear_output])
             button_apply_restart.click(restart)
 
 
@@ -419,23 +421,30 @@ def translate_swap_mode(dropdown_text):
 def start_swap(enhancer, detection, keep_fps, keep_frames, skip_audio, face_distance, blend_ratio, target_files, use_clip, clip_text):
     from roop.core import batch_process
 
-    if len(target_files) <= 0:
+    if target_files is None or len(target_files) <= 0:
         return None, None
     
-    shutil.rmtree(roop.globals.output_path)
+    if roop.globals.CFG.clear_output:
+        shutil.rmtree(roop.globals.output_path)
+        
     prepare_environment()
-
 
     roop.globals.selected_enhancer = enhancer
     roop.globals.target_path = None
-    roop.globals.max_face_distance = face_distance
+    roop.globals.distance_threshold = face_distance
     roop.globals.blend_ratio = blend_ratio
     roop.globals.keep_fps = keep_fps
     roop.globals.keep_frames = keep_frames
+    roop.globals.skip_audio = skip_audio
     roop.globals.face_swap_mode = translate_swap_mode(detection)
     if use_clip and clip_text is None or len(clip_text) < 1:
         use_clip = False
     
+    if roop.globals.face_swap_mode == 'selected':
+        if roop.globals.SELECTED_FACE_DATA_OUTPUT is None or len(roop.globals.SELECTED_FACE_DATA_OUTPUT) < 1:
+            gr.Error('No Target Face selected!')
+            return None, None
+
     batch_process([file.name for file in target_files], use_clip, clip_text)
     outdir = pathlib.Path(roop.globals.output_path)
     outfiles = [item for item in outdir.iterdir() if item.is_file()]
@@ -448,7 +457,7 @@ def start_preview(frame_num, enhancer, detection, face_distance, blend_ratio, ta
 
     roop.globals.face_swap_mode = translate_swap_mode(detection)
     roop.globals.selected_enhancer = enhancer
-    roop.globals.max_face_distance = face_distance
+    roop.globals.distance_threshold = face_distance
     roop.globals.blend_ratio = blend_ratio
     
 
@@ -558,7 +567,7 @@ def clean_temp():
     return None,None,None,None
 
 
-def apply_settings(themes, input_server_name, input_server_port, input_server_public, selected_image_format, selected_video_format):
+def apply_settings(themes, input_server_name, input_server_port, input_server_public, selected_image_format, selected_video_format, clear_output):
     roop.globals.CFG.selected_theme = themes
     roop.globals.CFG.server_name = input_server_name
     roop.globals.CFG.server_port = input_server_port

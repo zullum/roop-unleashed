@@ -23,6 +23,8 @@ headless = None
 log_level = 'error'
 selected_enhancer = None
 face_swap_mode = None
+blend_ratio = 0.5
+distance_threshold = 0.65
 
 FACE_ENHANCER = None
 
