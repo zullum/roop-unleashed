@@ -40,6 +40,8 @@ class PluginCodeformer(ChainImgPlugin):
         pass
 
     def process(self, img, params:dict):
+        import copy
+        
         # params can be used to transfer some img info to next processors
         from plugins.codeformer_app_cv2 import inference_app
         options = self.core.plugin_options(modname)
@@ -48,9 +50,28 @@ class PluginCodeformer(ChainImgPlugin):
             if not params["face_detected"]:
                 return img
 
-        temp_frame = inference_app(img, options.get("background_enhance"), options.get("face_upsample"),
-                              options.get("upscale"), options.get("codeformer_fidelity"),
-                              options.get("skip_if_no_face"))
+        # don't touch original    
+        temp_frame = copy.copy(img)
+        if "processed_faces" in params:
+            for face in params["processed_faces"]:
+                start_x, start_y, end_x, end_y = map(int, face['bbox'])
+                padding_x = int((end_x - start_x) * 0.5)
+                padding_y = int((end_y - start_y) * 0.5)
+                start_x = max(0, start_x - padding_x)
+                start_y = max(0, start_y - padding_y)
+                end_x = max(0, end_x + padding_x)
+                end_y = max(0, end_y + padding_y)
+                temp_face = temp_frame[start_y:end_y, start_x:end_x]
+                if temp_face.size:
+                    temp_face = inference_app(temp_face, options.get("background_enhance"), options.get("face_upsample"),
+                                        options.get("upscale"), options.get("codeformer_fidelity"),
+                                        options.get("skip_if_no_face"))
+                    temp_frame[start_y:end_y, start_x:end_x] = temp_face
+        else:
+            temp_frame = inference_app(temp_frame, options.get("background_enhance"), options.get("face_upsample"),
+                options.get("upscale"), options.get("codeformer_fidelity"),
+                options.get("skip_if_no_face"))
+
         
 
         if not "blend_ratio" in params: 

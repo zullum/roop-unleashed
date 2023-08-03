@@ -211,7 +211,8 @@ def run():
             bt_clear_input_faces.click(fn=on_clear_input_faces, outputs=[input_faces])
 
             bt_start.click(fn=start_swap, 
-                inputs=[selected_enhancer, selected_face_detection, roop.globals.keep_fps, roop.globals.keep_frames, roop.globals.skip_audio, max_face_distance, blend_ratio, bt_destfiles, chk_useclip, clip_text],
+                inputs=[selected_enhancer, clear_output, selected_face_detection, roop.globals.keep_fps, roop.globals.keep_frames,
+                         roop.globals.skip_audio, max_face_distance, blend_ratio, bt_destfiles, chk_useclip, clip_text],
                 outputs=[resultfiles, resultimage])
             
             bt_preview.click(fn=start_preview, 
@@ -418,12 +419,13 @@ def translate_swap_mode(dropdown_text):
         
 
 
-def start_swap(enhancer, detection, keep_fps, keep_frames, skip_audio, face_distance, blend_ratio, target_files, use_clip, clip_text):
+def start_swap(enhancer, clear_output, detection, keep_fps, keep_frames, skip_audio, face_distance, blend_ratio, target_files, use_clip, clip_text):
     from roop.core import batch_process
 
     if target_files is None or len(target_files) <= 0:
         return None, None
     
+    roop.globals.CFG.clear_output = clear_output
     if roop.globals.CFG.clear_output:
         shutil.rmtree(roop.globals.output_path)
         

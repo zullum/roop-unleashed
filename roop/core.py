@@ -203,6 +203,7 @@ def live_swap(frame, swap_mode, use_clip, clip_text):
     temp_frame, _ = roop.globals.IMAGE_CHAIN_PROCESSOR.run_chain(frame,  
                                                     {"swap_mode": swap_mode,
                                                         "original_frame": frame,
+                                                        "blend_ratio": roop.globals.blend_ratio,
                                                         "face_distance_threshold": roop.globals.distance_threshold,
                                                         "input_face_datas": [roop.globals.SELECTED_FACE_DATA_INPUT], "target_face_datas": [roop.globals.SELECTED_FACE_DATA_OUTPUT],
                                                         "clip_prompt": clip_text},
@@ -266,7 +267,7 @@ def batch_process(files, use_clip, new_clip_text) -> None:
 
     if(len(imagefiles) > 0):
         update_status('Processing image(s)')
-        roop.globals.BATCH_IMAGE_CHAIN_PROCESSOR.run_batch_chain(imagefiles, imagefinalnames, 8, processors, params_gen_func)
+        roop.globals.BATCH_IMAGE_CHAIN_PROCESSOR.run_batch_chain(imagefiles, imagefinalnames, roop.globals.execution_threads, processors, params_gen_func)
     if(len(videofiles) > 0):
         for index,v in enumerate(videofiles):
             update_status(f'Processing video {v}')
@@ -277,7 +278,7 @@ def batch_process(files, use_clip, new_clip_text) -> None:
                 update_status('Extracting frames...')
                 extract_frames(v)
                 temp_frame_paths = get_temp_frame_paths(v)
-                roop.globals.BATCH_IMAGE_CHAIN_PROCESSOR.run_batch_chain(temp_frame_paths, temp_frame_paths, 8, processors, params_gen_func)
+                roop.globals.BATCH_IMAGE_CHAIN_PROCESSOR.run_batch_chain(temp_frame_paths, temp_frame_paths, roop.globals.execution_threads, processors, params_gen_func)
                 update_status(f'Creating video with {fps} FPS...')
                 create_video(v, videofinalnames[index], fps)
             else:

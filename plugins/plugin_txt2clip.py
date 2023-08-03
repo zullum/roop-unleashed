@@ -43,9 +43,7 @@ class Text2Clip(ChainImgPlugin):
         global model_clip
 
         if model_clip is None:
-            devicename = "cuda" if torch.cuda.is_available() else "cpu"
-            device = torch.device(devicename)
-            print(f"Using device: {device}")    
+            device = torch.device(super().device)
             model_clip = CLIPDensePredT(version='ViT-B/16', reduce_dim=64, complex_trans_conv=True)
             model_clip.eval();
             model_clip.load_state_dict(torch.load('models/CLIP/rd64-uni-refined.pth', map_location=torch.device('cpu')), strict=False) 

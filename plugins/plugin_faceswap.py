@@ -38,12 +38,14 @@ class Faceswap(ChainImgPlugin):
         
         temp_frame = frame
         params["face_detected"] = True
+        params["processed_faces"] = []
 
         if params["swap_mode"] == "first":
             face = get_one_face(frame)
             if face is None:
                 params["face_detected"] = False
                 return frame
+            params["processed_faces"].append(face)
             frame = swap_face(params["input_face_datas"][0], face, frame) 
             return frame
 
@@ -58,6 +60,7 @@ class Faceswap(ChainImgPlugin):
             if params["swap_mode"] == "all":
                 for sf in params["input_face_datas"]:
                     for face in faces:
+                        params["processed_faces"].append(face)
                         temp_frame = swap_face(sf, face, temp_frame)
                 return temp_frame
             
@@ -66,6 +69,7 @@ class Faceswap(ChainImgPlugin):
                     for face in faces:
                         if compute_cosine_distance(tf.embedding, face.embedding) <= dist_threshold:
                             temp_frame = swap_face(params["input_face_datas"][i], face, temp_frame)
+                            params["processed_faces"].append(face)
                             break
 
             elif params["swap_mode"] == "all_female" or params["swap_mode"] == "all_male":
@@ -74,7 +78,8 @@ class Faceswap(ChainImgPlugin):
                 for face in faces:
                     if face.sex == gender:
                         face_found = True
-                    if face_found:                    
+                    if face_found:
+                        params["processed_faces"].append(face)
                         temp_frame = swap_face(params["input_face_datas"][0], face, temp_frame)
                         face_found = False
 

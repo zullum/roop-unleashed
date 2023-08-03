@@ -1,4 +1,5 @@
 from jaa import JaaCore
+from roop.utilities import get_device
 
 
 from typing import Any
@@ -154,6 +155,9 @@ class ChainImgProcessor(JaaCore):
         print(txt)
 
 class ChainImgPlugin:
+
+    device = get_device()
+
     def __init__(self, core: ChainImgProcessor):
         self.core = core
 
