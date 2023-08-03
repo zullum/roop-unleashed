@@ -1,6 +1,7 @@
+clear_output: true
 output_image_format: jpg
 output_video_format: mp4
 selected_theme: gstaff/xkcd
 server_name: ''
 server_port: 0
-server_share: true
+server_share: false
