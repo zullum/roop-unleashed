@@ -1,35 +1,231 @@
+from chain_img_processor import ChainImgProcessor, ChainImgPlugin
+import os
+from PIL import Image
+from numpy import asarray
+
 import torch
 import torch.nn as nn
-from torch.nn import init
-import functools
-from torch.optim import lr_scheduler
 import torch.nn.functional as F
-from torch.nn import Parameter as P
-from torchvision import models
 import scipy.io as sio
 import numpy as np
-import scipy.ndimage
 import torch.nn.utils.spectral_norm as SpectralNorm
 from torchvision.ops import roi_align
 
-from torch.autograd import Function
 from math import sqrt
-import random
 import os
-import math
 
 import cv2 
-import os.path as osp
-import time
-#import face_alignment # pip install face-alignment or conda install -c 1adrianb face_alignment
 import os
-import math
 from torchvision.transforms.functional import normalize
-from roop.utilities import resolve_relative_path, get_device
+import copy
+import threading
+
+modname = os.path.basename(__file__)[:-3] # calculating modname
 
 oDMDNet = None
-FaceDetection = None
 device = None
+
+THREAD_LOCK_DMDNET = threading.Lock()
+
+
+
+# start function
+def start(core:ChainImgProcessor):
+    manifest = { # plugin settings
+        "name": "DMDNet", # name
+        "version": "1.0", # version
+
+        "default_options": {},
+        "img_processor": {
+            "dmdnet": DMDNETPlugin
+        }
+    }
+    return manifest
+
+def start_with_options(core:ChainImgProcessor, manifest:dict):
+    pass
+
+
+class DMDNETPlugin(ChainImgPlugin):
+
+    # https://stackoverflow.com/a/67174339
+    def landmarks106_to_68(self, pt106):
+        map106to68=[1,10,12,14,16,3,5,7,0,23,21,19,32,30,28,26,17,
+                        43,48,49,51,50,
+                        102,103,104,105,101,
+                        72,73,74,86,78,79,80,85,84,
+                        35,41,42,39,37,36,
+                        89,95,96,93,91,90,
+                        52,64,63,71,67,68,61,58,59,53,56,55,65,66,62,70,69,57,60,54
+                        ]
+      
+        pt68 = []
+        for i in range(68):
+            index = map106to68[i]
+            pt68.append(pt106[index])
+        return pt68
+
+    def init_plugin(self):
+        global create
+        
+        if oDMDNet == None:
+            create(self.device)
+
+
+    def process(self, frame, params:dict):
+        if "face_detected" in params:
+            if not params["face_detected"]:
+                return frame
+
+        temp_frame = copy.copy(frame)
+        if "processed_faces" in params:
+            for face in params["processed_faces"]:
+                start_x, start_y, end_x, end_y = map(int, face['bbox'])
+                # padding_x = int((end_x - start_x) * 0.5)
+                # padding_y = int((end_y - start_y) * 0.5)
+                padding_x = 0
+                padding_y = 0
+
+                start_x = max(0, start_x - padding_x)
+                start_y = max(0, start_y - padding_y)
+                end_x = max(0, end_x + padding_x)
+                end_y = max(0, end_y + padding_y)
+                temp_face = temp_frame[start_y:end_y, start_x:end_x]
+                if temp_face.size:
+                    temp_face = self.enhance_face(temp_face, face)
+                    temp_face = cv2.resize(temp_face, (end_x - start_x,end_y - start_y), interpolation = cv2.INTER_LANCZOS4)
+                    temp_frame[start_y:end_y, start_x:end_x] = temp_face
+
+        temp_frame = Image.blend(Image.fromarray(frame), Image.fromarray(temp_frame), params["blend_ratio"])
+        return asarray(temp_frame)
+
+
+    def enhance_face(self, clip, face):
+        global device
+
+        lm106 = face.landmark_2d_106
+        lq_landmarks = asarray(self.landmarks106_to_68(lm106))
+        lq = read_img_tensor(clip, False)
+
+        LQLocs = get_component_location(lq_landmarks)
+        # generic
+        SpMem256Para, SpMem128Para, SpMem64Para = None, None, None
+
+        with torch.no_grad():
+            with THREAD_LOCK_DMDNET:
+                try:
+                    GenericResult, SpecificResult = oDMDNet(lq = lq.to(device), loc = LQLocs.unsqueeze(0), sp_256 = SpMem256Para, sp_128 = SpMem128Para, sp_64 = SpMem64Para)
+                except Exception as e:
+                    print(f'Error {e} there may be something wrong with the detected component locations.')
+                    return clip
+        save_generic = GenericResult * 0.5 + 0.5
+        save_generic = save_generic.squeeze(0).permute(1, 2, 0).flip(2) # RGB->BGR
+        save_generic = np.clip(save_generic.float().cpu().numpy(), 0, 1) * 255.0
+
+        check_lq = lq * 0.5 + 0.5
+        check_lq = check_lq.squeeze(0).permute(1, 2, 0).flip(2) # RGB->BGR
+        check_lq = np.clip(check_lq.float().cpu().numpy(), 0, 1) * 255.0
+        enhanced_img =  np.hstack((check_lq, save_generic))
+        temp_frame =  save_generic.astype("uint8")
+        # temp_frame = save_generic.astype("uint8")
+        return temp_frame
+    
+
+def create(devicename):
+    global device, oDMDNet
+
+    test = "cuda" if torch.cuda.is_available() else "cpu"
+    device = torch.device(devicename)
+    oDMDNet = DMDNet().to(device)
+    weights = torch.load('./models/DMDNet.pth') 
+    oDMDNet.load_state_dict(weights, strict=True)
+
+    oDMDNet.eval()
+    num_params = 0
+    for param in oDMDNet.parameters():
+        num_params += param.numel()
+
+    # print('{:>8s} : {}'.format('Using device', device))
+    # print('{:>8s} : {:.2f}M'.format('Model params', num_params/1e6))
+
+
+
+def read_img_tensor(Img=None, return_landmark=True): #rgb -1~1 
+#    Img = cv2.imread(img_path, cv2.IMREAD_UNCHANGED)  # BGR or G
+    if Img.ndim == 2:
+        Img = cv2.cvtColor(Img, cv2.COLOR_GRAY2RGB)  # GGG
+    else:
+        Img = cv2.cvtColor(Img, cv2.COLOR_BGR2RGB)  # RGB
+    
+    if Img.shape[0] < 512 or Img.shape[1] < 512:
+        Img = cv2.resize(Img, (512,512), interpolation = cv2.INTER_AREA)
+    # ImgForLands = Img.copy()
+
+    Img = Img.transpose((2, 0, 1))/255.0
+    Img = torch.from_numpy(Img).float()
+    normalize(Img, [0.5,0.5,0.5], [0.5,0.5,0.5], inplace=True)
+    ImgTensor = Img.unsqueeze(0)
+    return ImgTensor
+
+
+def get_component_location(Landmarks, re_read=False):
+    if re_read:
+        ReadLandmark = []
+        with open(Landmarks,'r') as f:
+            for line in f:
+                tmp = [float(i) for i in line.split(' ') if i != '\n']
+                ReadLandmark.append(tmp)
+        ReadLandmark = np.array(ReadLandmark) #
+        Landmarks = np.reshape(ReadLandmark, [-1, 2]) # 68*2
+    Map_LE_B = list(np.hstack((range(17,22), range(36,42))))
+    Map_RE_B = list(np.hstack((range(22,27), range(42,48))))
+    Map_LE = list(range(36,42))
+    Map_RE = list(range(42,48))
+    Map_NO = list(range(29,36))
+    Map_MO = list(range(48,68))
+
+    Landmarks[Landmarks>504]=504
+    Landmarks[Landmarks<8]=8
+    
+    #left eye
+    Mean_LE = np.mean(Landmarks[Map_LE],0)
+    L_LE1 = Mean_LE[1] - np.min(Landmarks[Map_LE_B,1])
+    L_LE1 = L_LE1 * 1.3
+    L_LE2 = L_LE1 / 1.9
+    L_LE_xy = L_LE1 + L_LE2
+    L_LE_lt = [L_LE_xy/2, L_LE1]
+    L_LE_rb = [L_LE_xy/2, L_LE2]
+    Location_LE = np.hstack((Mean_LE - L_LE_lt + 1, Mean_LE + L_LE_rb)).astype(int)
+
+    #right eye
+    Mean_RE = np.mean(Landmarks[Map_RE],0)
+    L_RE1 = Mean_RE[1] - np.min(Landmarks[Map_RE_B,1])
+    L_RE1 = L_RE1 * 1.3
+    L_RE2 = L_RE1 / 1.9
+    L_RE_xy = L_RE1 + L_RE2
+    L_RE_lt = [L_RE_xy/2, L_RE1]
+    L_RE_rb = [L_RE_xy/2, L_RE2]
+    Location_RE = np.hstack((Mean_RE - L_RE_lt + 1, Mean_RE + L_RE_rb)).astype(int)
+
+    #nose
+    Mean_NO = np.mean(Landmarks[Map_NO],0)
+    L_NO1 =( np.max([Mean_NO[0] - Landmarks[31][0], Landmarks[35][0] - Mean_NO[0]])) * 1.25
+    L_NO2 = (Landmarks[33][1] - Mean_NO[1]) * 1.1
+    L_NO_xy = L_NO1 * 2
+    L_NO_lt = [L_NO_xy/2, L_NO_xy - L_NO2]
+    L_NO_rb = [L_NO_xy/2, L_NO2]
+    Location_NO = np.hstack((Mean_NO - L_NO_lt + 1, Mean_NO + L_NO_rb)).astype(int)
+    
+    #mouth
+    Mean_MO = np.mean(Landmarks[Map_MO],0)
+    L_MO = np.max((np.max(np.max(Landmarks[Map_MO],0) - np.min(Landmarks[Map_MO],0))/2,16)) * 1.1
+    MO_O = Mean_MO - L_MO + 1
+    MO_T = Mean_MO + L_MO
+    MO_T[MO_T>510]=510
+    Location_MO = np.hstack((MO_O, MO_T)).astype(int)
+    return torch.cat([torch.FloatTensor(Location_LE).unsqueeze(0), torch.FloatTensor(Location_RE).unsqueeze(0), torch.FloatTensor(Location_NO).unsqueeze(0), torch.FloatTensor(Location_MO).unsqueeze(0)], dim=0)
+
+
 
 
 def calc_mean_std_4D(feat, eps=1e-5):
@@ -56,6 +252,8 @@ def convU(in_channels, out_channels,conv_layer, norm_layer, kernel_size=3, strid
         nn.LeakyReLU(0.2),
         SpectralNorm(conv_layer(out_channels, out_channels, kernel_size=kernel_size, stride=stride, dilation=dilation, padding=((kernel_size-1)//2)*dilation, bias=bias)),
     )
+    
+
 class MSDilateBlock(nn.Module):
     def __init__(self, in_channels,conv_layer=nn.Conv2d, norm_layer=nn.BatchNorm2d, kernel_size=3, dilation=[1,1,1,1], bias=True):
         super(MSDilateBlock, self).__init__()
@@ -634,158 +832,4 @@ class UpResBlock(nn.Module):
     def forward(self, x):
         out = x + self.Model(x)
         return out
-
-
-#######################################
-# Interface to roop
-#######################################
-
-def create():
-    global device, oDMDNet
-
-    device = torch.device(get_device())
-    oDMDNet = DMDNet().to(device)
-    directory = os.getcwd()
-    weights = torch.load('./models/DMDNet.pth') 
-    oDMDNet.load_state_dict(weights, strict=True)
-
-    oDMDNet.eval()
-    num_params = 0
-    for param in oDMDNet.parameters():
-        num_params += param.numel()
-
-    print('{:>8s} : {}'.format('Using device', device))
-    print('{:>8s} : {:.2f}M'.format('Model params', num_params/1e6))
-
-
-def enhance_DMDNet(temp_frame):
-    global device, oDMDNet, FaceDetection
-
-    if oDMDNet == None:
-        create()
-    FaceDetection = face_alignment.FaceAlignment(face_alignment.LandmarksType.TWO_D, device=get_device())
-
-    lq, lq_landmarks = read_img_tensor(temp_frame, return_landmark=True)
-    if lq_landmarks is None:
-        print('Error detecting landmarks')
-        return None
-
-    LQLocs = get_component_location(lq_landmarks)
-
-    # generic
-    SpMem256Para, SpMem128Para, SpMem64Para = None, None, None
-
-    with torch.no_grad():
-        try:
-            GenericResult, SpecificResult = oDMDNet(lq = lq.to(device), loc = LQLocs.unsqueeze(0), sp_256 = SpMem256Para, sp_128 = SpMem128Para, sp_64 = SpMem64Para)
-        except Exception as e:
-            print(f'Error {e} there may be something wrong with the detected component locations.')
-            return None
-    save_generic = GenericResult * 0.5 + 0.5
-    save_generic = save_generic.squeeze(0).permute(1, 2, 0).flip(2) # RGB->BGR
-    save_generic = np.clip(save_generic.float().cpu().numpy(), 0, 1) * 255.0
-
-    check_lq = lq * 0.5 + 0.5
-    check_lq = check_lq.squeeze(0).permute(1, 2, 0).flip(2) # RGB->BGR
-    check_lq = np.clip(check_lq.float().cpu().numpy(), 0, 1) * 255.0
-    enhanced_img =  np.hstack((check_lq, save_generic))
-    return save_generic
-
-
-def read_img_tensor(Img=None, return_landmark=True): #rgb -1~1 
-#    Img = cv2.imread(img_path, cv2.IMREAD_UNCHANGED)  # BGR or G
-    if Img.ndim == 2:
-        Img = cv2.cvtColor(Img, cv2.COLOR_GRAY2RGB)  # GGG
-    else:
-        Img = cv2.cvtColor(Img, cv2.COLOR_BGR2RGB)  # RGB
-    
-    if Img.shape[0] < 512 or Img.shape[1] < 512:
-        Img = cv2.resize(Img, (512,512), interpolation = cv2.INTER_AREA)
-
-    ImgForLands = Img.copy()
-    Img = Img.transpose((2, 0, 1))/255.0
-    Img = torch.from_numpy(Img).float()
-    normalize(Img, [0.5,0.5,0.5], [0.5,0.5,0.5], inplace=True)
-    ImgTensor = Img.unsqueeze(0)
-    SelectPred = None
-    PredsAll = None
-    if return_landmark:
-        try:
-            PredsAll = FaceDetection.get_landmarks(ImgForLands)
-        except Exception as e:
-            print(f'Error {e} in detecting face.')
-
-        if PredsAll is None:
-            print('Warning: No face is detected.')
-            return ImgTensor, None
-        ins = 0
-        if len(PredsAll)!=1:
-            hights = []
-            for l in PredsAll:
-                hights.append(l[8,1] - l[19,1])
-            ins = hights.index(max(hights))
-            print('Warning: Too many faces are detected, only handle the largest one...')
-        SelectPred = PredsAll[ins]
-    return ImgTensor, SelectPred
-
-
-def get_component_location(Landmarks, re_read=False):
-    if re_read:
-        ReadLandmark = []
-        with open(Landmarks,'r') as f:
-            for line in f:
-                tmp = [float(i) for i in line.split(' ') if i != '\n']
-                ReadLandmark.append(tmp)
-        ReadLandmark = np.array(ReadLandmark) #
-        Landmarks = np.reshape(ReadLandmark, [-1, 2]) # 68*2
-    Map_LE_B = list(np.hstack((range(17,22), range(36,42))))
-    Map_RE_B = list(np.hstack((range(22,27), range(42,48))))
-    Map_LE = list(range(36,42))
-    Map_RE = list(range(42,48))
-    Map_NO = list(range(29,36))
-    Map_MO = list(range(48,68))
-
-    Landmarks[Landmarks>504]=504
-    Landmarks[Landmarks<8]=8
-    
-    #left eye
-    Mean_LE = np.mean(Landmarks[Map_LE],0)
-    L_LE1 = Mean_LE[1] - np.min(Landmarks[Map_LE_B,1])
-    L_LE1 = L_LE1 * 1.3
-    L_LE2 = L_LE1 / 1.9
-    L_LE_xy = L_LE1 + L_LE2
-    L_LE_lt = [L_LE_xy/2, L_LE1]
-    L_LE_rb = [L_LE_xy/2, L_LE2]
-    Location_LE = np.hstack((Mean_LE - L_LE_lt + 1, Mean_LE + L_LE_rb)).astype(int)
-
-    #right eye
-    Mean_RE = np.mean(Landmarks[Map_RE],0)
-    L_RE1 = Mean_RE[1] - np.min(Landmarks[Map_RE_B,1])
-    L_RE1 = L_RE1 * 1.3
-    L_RE2 = L_RE1 / 1.9
-    L_RE_xy = L_RE1 + L_RE2
-    L_RE_lt = [L_RE_xy/2, L_RE1]
-    L_RE_rb = [L_RE_xy/2, L_RE2]
-    Location_RE = np.hstack((Mean_RE - L_RE_lt + 1, Mean_RE + L_RE_rb)).astype(int)
-
-    #nose
-    Mean_NO = np.mean(Landmarks[Map_NO],0)
-    L_NO1 =( np.max([Mean_NO[0] - Landmarks[31][0], Landmarks[35][0] - Mean_NO[0]])) * 1.25
-    L_NO2 = (Landmarks[33][1] - Mean_NO[1]) * 1.1
-    L_NO_xy = L_NO1 * 2
-    L_NO_lt = [L_NO_xy/2, L_NO_xy - L_NO2]
-    L_NO_rb = [L_NO_xy/2, L_NO2]
-    Location_NO = np.hstack((Mean_NO - L_NO_lt + 1, Mean_NO + L_NO_rb)).astype(int)
-    
-    #mouth
-    Mean_MO = np.mean(Landmarks[Map_MO],0)
-    L_MO = np.max((np.max(np.max(Landmarks[Map_MO],0) - np.min(Landmarks[Map_MO],0))/2,16)) * 1.1
-    MO_O = Mean_MO - L_MO + 1
-    MO_T = Mean_MO + L_MO
-    MO_T[MO_T>510]=510
-    Location_MO = np.hstack((MO_O, MO_T)).astype(int)
-    return torch.cat([torch.FloatTensor(Location_LE).unsqueeze(0), torch.FloatTensor(Location_RE).unsqueeze(0), torch.FloatTensor(Location_NO).unsqueeze(0), torch.FloatTensor(Location_MO).unsqueeze(0)], dim=0)
-
-
-
 

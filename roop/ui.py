@@ -113,7 +113,7 @@ def run():
                         roop.globals.skip_audio = gr.Checkbox(label="Skip audio", value=False)
                 with gr.Row():
                     with gr.Column():
-                        selected_enhancer = gr.Dropdown(["None", "Codeformer", "GFPGAN"], value="None", label="Select post-processing")
+                        selected_enhancer = gr.Dropdown(["None", "Codeformer", "DMDNet", "GFPGAN"], value="None", label="Select post-processing")
                         with gr.Accordion(label="Masking", open=True):
                             chk_useclip = gr.Checkbox(label="Use Text to Clip Masking", value=False)
                             clip_text = gr.Textbox(label="List of objects to mask and restore back on fake image", placeholder="hands,hair")
@@ -466,7 +466,7 @@ def start_preview(frame_num, enhancer, detection, face_distance, blend_ratio, ta
     filename = target_files[selected_preview_index].name
     if is_video(filename) or filename.lower().endswith('gif'):
         current_frame = get_video_frame(filename, frame_num)
-    elif is_image(filename):
+    elif is_image(filename) or filename.lower().endswith('webp'):
         current_frame = get_image_frame(filename)
     if current_frame is None:
         return None 

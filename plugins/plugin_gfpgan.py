@@ -37,7 +37,7 @@ class GFPGAN(ChainImgPlugin):
 
         if model_gfpgan is None:
             model_path = resolve_relative_path('../models/GFPGANv1.4.pth')
-            model_gfpgan = gfpgan.GFPGANer(model_path=model_path, upscale=1, device=super().device) # type: ignore[attr-defined]
+            model_gfpgan = gfpgan.GFPGANer(model_path=model_path, upscale=1, device=self.device) # type: ignore[attr-defined]
 
 
 

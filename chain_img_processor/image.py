@@ -156,10 +156,11 @@ class ChainImgProcessor(JaaCore):
 
 class ChainImgPlugin:
 
-    device = get_device()
+    device = 'cpu'
 
     def __init__(self, core: ChainImgProcessor):
         self.core = core
+        self.device = get_device()
 
     def init_plugin(self): # here you can init something. Called once
         pass

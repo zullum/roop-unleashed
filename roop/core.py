@@ -141,7 +141,7 @@ def pre_check() -> bool:
     download_directory_path = resolve_relative_path('../models')
     conditional_download(download_directory_path, ['https://huggingface.co/countfloyd/deepfake/resolve/main/inswapper_128.onnx'])
     conditional_download(download_directory_path, ['https://huggingface.co/countfloyd/deepfake/resolve/main/GFPGANv1.4.pth'])
-    # conditional_download(download_directory_path, ['https://github.com/csxmli2016/DMDNet/releases/download/v1/DMDNet.pth'])
+    conditional_download(download_directory_path, ['https://github.com/csxmli2016/DMDNet/releases/download/v1/DMDNet.pth'])
     download_directory_path = resolve_relative_path('../models/CLIP')
     conditional_download(download_directory_path, ['https://huggingface.co/countfloyd/deepfake/resolve/main/rd64-uni-refined.pth'])
     download_directory_path = resolve_relative_path('../models/CodeFormer')
@@ -186,19 +186,28 @@ def InitPlugins():
         roop.globals.VIDEO_CHAIN_PROCESSOR.init_with_plugins()
 
 
+def get_processing_plugins(use_clip):
+    processors = "faceswap"
+    if use_clip:
+        processors += ",txt2clip"
+    
+    if roop.globals.selected_enhancer == 'GFPGAN':
+        processors += ",gfpgan"
+    elif roop.globals.selected_enhancer == 'Codeformer':
+        processors += ",codeformer"
+    elif roop.globals.selected_enhancer == 'DMDNet':
+        processors += ",dmdnet"
+    
+    return processors
+
+
 def live_swap(frame, swap_mode, use_clip, clip_text):
     if frame is None:
         return frame
 
     InitPlugins()
+    processors = get_processing_plugins(use_clip)
 
-    processors = "faceswap"
-    if use_clip:
-        processors += ",txt2clip"
-    if roop.globals.selected_enhancer == 'GFPGAN':
-        processors += ",gfpgan"
-    elif roop.globals.selected_enhancer == 'Codeformer':
-        processors += ",codeformer"
 
     temp_frame, _ = roop.globals.IMAGE_CHAIN_PROCESSOR.run_chain(frame,  
                                                     {"swap_mode": swap_mode,
@@ -224,7 +233,8 @@ def batch_process(files, use_clip, new_clip_text) -> None:
     global clip_text
 
     InitPlugins()
-    
+    processors = get_processing_plugins(use_clip)
+
     clip_text = new_clip_text
 
     imagefiles = []
@@ -257,13 +267,6 @@ def batch_process(files, use_clip, new_clip_text) -> None:
             videofiles.append(fullname)
             videofinalnames.append(get_destfilename_from_path(fullname, roop.globals.output_path, f'_fake.{roop.globals.CFG.output_video_format}'))
 
-    processors = "faceswap"
-    if use_clip:
-        processors += ",txt2clip"
-    if roop.globals.selected_enhancer == 'GFPGAN':
-        processors += ",gfpgan"
-    elif roop.globals.selected_enhancer == 'Codeformer':
-        processors += ",codeformer"
 
     if(len(imagefiles) > 0):
         update_status('Processing image(s)')
