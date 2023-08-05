@@ -65,6 +65,7 @@ def run():
     available_themes = ["Default", "gradio/glass", "gradio/monochrome", "gradio/seafoam", "gradio/soft", "gstaff/xkcd", "freddyaboulton/dracula_revamped", "ysharma/steampunk"]
     image_formats = ['jpg','png', 'webp']
     video_formats = ['avi','mkv', 'mp4', 'webm']
+    video_codecs = ['libx264', 'libx265', 'libvpx-vp9', 'h264_nvenc', 'hevc_nvenc']
 
     server_name = roop.globals.CFG.server_name
     if server_name is None or len(server_name) < 1:
@@ -127,7 +128,7 @@ def run():
                             resultfiles = gr.Files(label='Processed File(s)', interactive=False)
                             resultimage = gr.Image(type='filepath', interactive=False)
                     with gr.Column():
-                        bt_preview = gr.Button("Preview face swap", variant='secondary')
+                        fake_preview = gr.Checkbox(label="Face swap frames", value=False)
                         with gr.Accordion(label="Preview Original/Fake Frame", open=True):
                             previewimage = gr.Image(label="Preview Image", interactive=False)
                             with gr.Column():
@@ -174,21 +175,24 @@ def run():
                         themes = gr.Dropdown(available_themes, label="Theme", info="Change needs complete restart", value=roop.globals.CFG.selected_theme)
                     with gr.Column():
                         share_checkbox = gr.Checkbox(label="Public Server", value=roop.globals.CFG.server_share)
-                        button_clean_temp = gr.Button("Clean temp folder")
                     with gr.Column():
                         input_server_name = gr.Textbox(label="Server Name", lines=1, info="Leave blank to run locally", value=roop.globals.CFG.server_name)
                     with gr.Column():
                         input_server_port = gr.Number(label="Server Port", precision=0, info="Leave at 0 to use default", value=roop.globals.CFG.server_port)
                 with gr.Row():
                     with gr.Column():
+                        clear_output = gr.Checkbox(label='Clear output folder before each run', value=roop.globals.CFG.output_image_format)
+                        button_clean_temp = gr.Button("Clean temp folder")
+                    with gr.Column():
                         selected_image_format = gr.Dropdown(image_formats, label="Image Output Format", value=roop.globals.CFG.output_image_format)
                     with gr.Column():
                         selected_video_format = gr.Dropdown(video_formats, label="Video Output Format", value=roop.globals.CFG.output_video_format)
                     with gr.Column():
-                        gr.Markdown(' ')
+                        selected_video_codec = gr.Dropdown(video_codecs, label="Video Codecs", value=roop.globals.CFG.output_video_codec)
+                        video_quality = gr.Slider(0, 100, value=14, label="Video Quality (crf)", step=1.0)
                 with gr.Row():
                     with gr.Column():
-                        clear_output = gr.Checkbox(label='Clear output folder before each run', value=roop.globals.CFG.output_image_format)
+                        gr.Markdown(' ')
                 with gr.Row():
                     button_apply_settings = gr.Button("Apply Settings")
                     button_apply_restart = gr.Button("Restart Server")
@@ -215,9 +219,12 @@ def run():
                          roop.globals.skip_audio, max_face_distance, blend_ratio, bt_destfiles, chk_useclip, clip_text],
                 outputs=[resultfiles, resultimage])
             
-            bt_preview.click(fn=start_preview, 
-                inputs=[preview_frame_num, selected_enhancer, selected_face_detection, max_face_distance, blend_ratio, bt_destfiles, chk_useclip, clip_text], outputs=[previewimage])
-            preview_frame_num.change(fn=on_preview_frame_changed, inputs=[preview_frame_num, bt_destfiles], outputs=[previewimage], show_progress='hidden')
+            fake_preview.change(fn=on_preview_frame_changed, inputs=[preview_frame_num, bt_destfiles, fake_preview, selected_enhancer, selected_face_detection,
+                                                                           max_face_distance, blend_ratio, bt_destfiles, chk_useclip, clip_text],
+                                                                         outputs=[previewimage])
+            preview_frame_num.change(fn=on_preview_frame_changed, inputs=[preview_frame_num, bt_destfiles, fake_preview, selected_enhancer, selected_face_detection,
+                                                                           max_face_distance, blend_ratio, bt_destfiles, chk_useclip, clip_text],
+                                                                         outputs=[previewimage], show_progress='hidden')
             bt_use_face_from_preview.click(fn=on_use_face_from_selected, show_progress='full', inputs=[bt_destfiles, preview_frame_num], outputs=[dynamic_face_selection, face_selection, target_faces])
             
             # Live Cam
@@ -249,7 +256,6 @@ def run():
             print("Keyboard interruption in main thread... closing server.")
             run_server = False
         ui.close()
-
 
 
 def on_srcimg_changed(imgsrc, progress=gr.Progress()):
@@ -378,14 +384,33 @@ def on_selected_face():
 
 
 
-def on_preview_frame_changed(frame_num, files):
+def on_preview_frame_changed(frame_num, files, fake_preview, enhancer, detection, face_distance, blend_ratio, target_files, use_clip, clip_text):
+    from roop.core import live_swap
+
     filename = files[selected_preview_index].name
     if is_video(filename) or filename.lower().endswith('gif'):
         current_frame = get_video_frame(filename, frame_num)
     else:
         current_frame = get_image_frame(filename)
+    if current_frame is None:
+        return None 
+
+    if not fake_preview or roop.globals.SELECTED_FACE_DATA_INPUT is None:
+        return convert_to_gradio(current_frame)
+
+    roop.globals.face_swap_mode = translate_swap_mode(detection)
+    roop.globals.selected_enhancer = enhancer
+    roop.globals.distance_threshold = face_distance
+    roop.globals.blend_ratio = blend_ratio
+
+    if use_clip and clip_text is None or len(clip_text) < 1:
+        use_clip = False
+
+    current_frame = live_swap(current_frame, roop.globals.face_swap_mode, use_clip, clip_text)
+    if current_frame is None:
+        return None 
     return convert_to_gradio(current_frame)
-    
+
     
 
 
@@ -454,31 +479,6 @@ def start_swap(enhancer, clear_output, detection, keep_fps, keep_frames, skip_au
         return outfiles, outfiles[0]
     return None, None
 
-def start_preview(frame_num, enhancer, detection, face_distance, blend_ratio, target_files, use_clip, clip_text):
-    from roop.core import live_swap
-
-    roop.globals.face_swap_mode = translate_swap_mode(detection)
-    roop.globals.selected_enhancer = enhancer
-    roop.globals.distance_threshold = face_distance
-    roop.globals.blend_ratio = blend_ratio
-    
-
-    filename = target_files[selected_preview_index].name
-    if is_video(filename) or filename.lower().endswith('gif'):
-        current_frame = get_video_frame(filename, frame_num)
-    elif is_image(filename) or filename.lower().endswith('webp'):
-        current_frame = get_image_frame(filename)
-    if current_frame is None:
-        return None 
-
-    if use_clip and clip_text is None or len(clip_text) < 1:
-        use_clip = False
-        
-
-    if roop.globals.SELECTED_FACE_DATA_INPUT is not None:
-        current_frame = live_swap(current_frame, roop.globals.face_swap_mode, use_clip, clip_text)
-
-    return convert_to_gradio(current_frame)
    
     
 def on_destfiles_selected(evt: gr.SelectData, target_files):
@@ -589,5 +589,3 @@ def restart():
 # Gradio wants Images in RGB
 def convert_to_gradio(image):
     return cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-
-

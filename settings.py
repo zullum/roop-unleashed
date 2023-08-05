@@ -27,6 +27,7 @@ class Settings:
         self.server_share = self.default_get(data, 'server_share', False)
         self.output_image_format = self.default_get(data, 'output_image_format', 'png')
         self.output_video_format = self.default_get(data, 'output_video_format', 'mp4')
+        self.output_video_codec = self.default_get(data, 'output_video_codec', 'libx264')
         self.clear_output = self.default_get(data, 'clear_output', True)
 
 
@@ -39,6 +40,7 @@ class Settings:
             'server_share': self.server_share,
             'output_image_format' : self.output_image_format,
             'output_video_format' : self.output_video_format,
+            'output_video_codec' : self.output_video_codec,
             'clear_output' : self.clear_output
         }
         with open(self.config_file, 'w') as f:
