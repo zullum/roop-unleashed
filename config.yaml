@@ -1,8 +1,0 @@
-clear_output: jpg
-output_image_format: png
-output_video_codec: libx264
-output_video_format: mp4
-selected_theme: Default
-server_name: ''
-server_port: 0
-server_share: true

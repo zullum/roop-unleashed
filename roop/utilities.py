@@ -48,6 +48,14 @@ def detect_fps(target_path: str) -> float:
         pass
     return 24.0
 
+def cut_video(original_video: str, cut_video: str, start_frame: int, end_frame: int):
+    fps = detect_fps(original_video)
+    start_time = start_frame / fps
+    num_frames = end_frame - start_frame
+
+    run_ffmpeg(['-ss',  str(start_time), '-i', original_video, '-c:v', 'libx264', '-c:a', 'aac', '-frames:v', str(num_frames), cut_video])
+    # run_ffmpeg(['-i', original_video, '-ss', start_time, '-to', end_time, '-c:v', 'copy', '-c:a', 'copy', cut_video])
+
 
 def extract_frames(target_path: str) -> None:
     create_temp(target_path)
@@ -61,6 +69,7 @@ def create_video(target_path: str, dest_filename: str, fps: float = 24.0) -> Non
     run_ffmpeg(['-r', str(fps), '-i', os.path.join(temp_directory_path, f'%04d.{roop.globals.CFG.output_image_format}'), '-c:v', roop.globals.video_encoder, '-crf', str(roop.globals.video_quality), '-pix_fmt', 'yuv420p', '-vf', 'colorspace=bt709:iall=bt601-6-625:fast=1', '-y', dest_filename])
     # ffmpeg -hide_banner -hwaccel auto -loglevel error -r 30.0 -i G:/delme\\temp\\te1533...0\\%04d.png -c:v libx264 -crf 18
     return dest_filename
+
 
 def create_gif_from_video(video_path: str, gif_path):
     from roop.capturer import get_video_frame
@@ -101,8 +110,12 @@ def normalize_output_path(source_path: str, target_path: str, output_path: str) 
 
 
 def get_destfilename_from_path(srcfilepath: str, destfilepath: str, extension: str) -> str:
-    fn = os.path.splitext(os.path.basename(srcfilepath))[0]
-    return os.path.join(destfilepath, f'{fn}{extension}')
+    fn, ext = os.path.splitext(os.path.basename(srcfilepath))
+    if '.' in extension:
+        return os.path.join(destfilepath, f'{fn}{extension}')
+    return os.path.join(destfilepath, f'{fn}{extension}{ext}')
+
+
 
 
 def create_temp(target_path: str) -> None:

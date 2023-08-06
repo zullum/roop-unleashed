@@ -9,7 +9,7 @@ import shutil
 
 from roop.face_helper import extract_face_images
 from roop.capturer import get_video_frame, get_video_frame_total, get_image_frame
-from roop.utilities import is_image, is_video, create_version_html, get_destfilename_from_path, create_gif_from_video
+from roop.utilities import is_image, is_video, create_version_html, get_destfilename_from_path, create_gif_from_video, extract_frames, cut_video, resolve_relative_path
 from settings import Settings
 
 restart_server = False
@@ -58,7 +58,7 @@ def prepare_environment():
 
 
 def run():
-    global input_faces, target_faces, face_selection, fake_cam_image, restart_server, live_cam_active
+    global input_faces, target_faces, face_selection, fake_cam_image, restart_server, live_cam_active, on_settings_changed
 
     prepare_environment()
 
@@ -74,12 +74,12 @@ def run():
     if server_port <= 0:
         server_port = None
 
+    settings_controls = []
 
     live_cam_active = False
     run_server = True
 
     while run_server:
-
         with gr.Blocks(title=f'{roop.metadata.name} {roop.metadata.version}', theme=roop.globals.CFG.selected_theme, css="span {color: var(--block-info-text-color)}") as ui:
             with gr.Row(variant='panel'):
                     gr.Markdown(f"### [{roop.metadata.name} {roop.metadata.version}](https://github.com/C0untFloyd/roop-unleashed)")
@@ -124,19 +124,23 @@ def run():
                 with gr.Row(variant='panel'):
                     with gr.Column():
                         bt_start = gr.Button("Start", variant='primary')
+                    with gr.Column():
+                        gr.Markdown(' ')
+                    with gr.Column():
+                        fake_preview = gr.Checkbox(label="Face swap frames", value=False)
+                    with gr.Column():
+                        bt_refresh_preview = gr.Button("Refresh", variant='secondary')
+                with gr.Row(variant='panel'):
+                    with gr.Column():
                         with gr.Accordion(label="Results", open=True):
                             resultfiles = gr.Files(label='Processed File(s)', interactive=False)
                             resultimage = gr.Image(type='filepath', interactive=False)
                     with gr.Column():
-                        fake_preview = gr.Checkbox(label="Face swap frames", value=False)
                         with gr.Accordion(label="Preview Original/Fake Frame", open=True):
                             previewimage = gr.Image(label="Preview Image", interactive=False)
                             with gr.Column():
                                 preview_frame_num = gr.Slider(0, 0, value=0, label="Frame Number", step=1.0)
                                 bt_use_face_from_preview = gr.Button("Use Face from this Frame", variant='primary')
-                            
-
-                        
                         
             with gr.Tab("Live Cam"):
                 cam_toggle = gr.Checkbox(label='Activate', value=live_cam_active)
@@ -159,12 +163,29 @@ def run():
                             gr.Button("Start").click(fn=lambda: gr.Info('Not yet implemented...'))
                 with gr.Row(variant='panel'):
                     with gr.Accordion(label="Video/GIF", open=False):
-                        gr.Markdown("Extract frames from video")
-                        start_extract_frames = gr.Button("Start")
-                        gr.Markdown("Create video from image files")
-                        gr.Button("Start").click(fn=lambda: gr.Info('Not yet implemented...'))
-                        gr.Markdown("Create GIF from video")
-                        start_create_gif = gr.Button("Create GIF")
+                        with gr.Row(variant='panel'):
+                            with gr.Column():
+                                gr.Markdown("""
+                                            # Cut video
+                                            Be aware that this means re-encoding the video which might take a longer time.
+                                            Encoding uses your configuration from the Settings Tab.
+    """)
+                            with gr.Column():
+                                cut_start_time = gr.Slider(0, 100000, value=0, label="Start Frame", step=1.0, interactive=True)
+                            with gr.Column():
+                                cut_end_time = gr.Slider(1, 100000, value=1, label="End Frame", step=1.0, interactive=True)
+                            with gr.Column():
+                                start_cut_video = gr.Button("Start")
+
+                        with gr.Row(variant='panel'):
+                            gr.Markdown("Extract frames from video")
+                            start_extract_frames = gr.Button("Start")
+                        with gr.Row(variant='panel'):
+                            gr.Markdown("Create video from image files")
+                            gr.Button("Start").click(fn=lambda: gr.Info('Not yet implemented...'))
+                        with gr.Row(variant='panel'):
+                            gr.Markdown("Create GIF from video")
+                            start_create_gif = gr.Button("Create GIF")
                 with gr.Row():
                     extra_files_output = gr.Files(label='Resulting output files', file_count="multiple")
                         
@@ -174,29 +195,31 @@ def run():
                     with gr.Column():
                         themes = gr.Dropdown(available_themes, label="Theme", info="Change needs complete restart", value=roop.globals.CFG.selected_theme)
                     with gr.Column():
-                        share_checkbox = gr.Checkbox(label="Public Server", value=roop.globals.CFG.server_share)
+                        settings_controls.append(gr.Checkbox(label="Public Server", value=roop.globals.CFG.server_share, interactive=True))
+                        settings_controls.append(gr.Checkbox(label='Clear output folder before each run', value=roop.globals.CFG.output_image_format, interactive=True))
                     with gr.Column():
                         input_server_name = gr.Textbox(label="Server Name", lines=1, info="Leave blank to run locally", value=roop.globals.CFG.server_name)
                     with gr.Column():
                         input_server_port = gr.Number(label="Server Port", precision=0, info="Leave at 0 to use default", value=roop.globals.CFG.server_port)
                 with gr.Row():
                     with gr.Column():
-                        clear_output = gr.Checkbox(label='Clear output folder before each run', value=roop.globals.CFG.output_image_format)
-                        button_clean_temp = gr.Button("Clean temp folder")
+                        gr.Slider(1, 64, value=8, label="Max. Number of Threads", info='default: 8', step=1.0, interactive=True)
                     with gr.Column():
-                        selected_image_format = gr.Dropdown(image_formats, label="Image Output Format", value=roop.globals.CFG.output_image_format)
+                        settings_controls.append(gr.Dropdown(image_formats, label="Image Output Format", info='default: png', value=roop.globals.CFG.output_image_format, interactive=True))
                     with gr.Column():
-                        selected_video_format = gr.Dropdown(video_formats, label="Video Output Format", value=roop.globals.CFG.output_video_format)
+                        settings_controls.append(gr.Dropdown(video_formats, label="Video Output Format", info='default: mp4', value=roop.globals.CFG.output_video_format, interactive=True))
                     with gr.Column():
-                        selected_video_codec = gr.Dropdown(video_codecs, label="Video Codecs", value=roop.globals.CFG.output_video_codec)
-                        video_quality = gr.Slider(0, 100, value=14, label="Video Quality (crf)", step=1.0)
+                        settings_controls.append(gr.Dropdown(video_codecs, label="Video Codec", info='default: libx264', value=roop.globals.CFG.output_video_codec, interactive=True))
+                        gr.Slider(0, 100, value=14, label="Video Quality (crf)", info='default: 14', step=1.0, interactive=True)
                 with gr.Row():
                     with gr.Column():
                         gr.Markdown(' ')
-                with gr.Row():
-                    button_apply_settings = gr.Button("Apply Settings")
-                    button_apply_restart = gr.Button("Restart Server")
-                    gr.Markdown(' ')
+                    with gr.Column():
+                        button_clean_temp = gr.Button("Clean temp folder")
+                    with gr.Column():
+                        button_apply_settings = gr.Button("Apply Settings")
+                    with gr.Column():
+                        button_apply_restart = gr.Button("Restart Server")
 
             input_faces.select(on_select_input_face, None, None)
             bt_remove_selected_input_face.click(fn=remove_selected_input_face, outputs=[input_faces])
@@ -215,17 +238,17 @@ def run():
             bt_clear_input_faces.click(fn=on_clear_input_faces, outputs=[input_faces])
 
             bt_start.click(fn=start_swap, 
-                inputs=[selected_enhancer, clear_output, selected_face_detection, roop.globals.keep_fps, roop.globals.keep_frames,
+                inputs=[selected_enhancer, selected_face_detection, roop.globals.keep_fps, roop.globals.keep_frames,
                          roop.globals.skip_audio, max_face_distance, blend_ratio, bt_destfiles, chk_useclip, clip_text],
                 outputs=[resultfiles, resultimage])
             
-            fake_preview.change(fn=on_preview_frame_changed, inputs=[preview_frame_num, bt_destfiles, fake_preview, selected_enhancer, selected_face_detection,
-                                                                           max_face_distance, blend_ratio, bt_destfiles, chk_useclip, clip_text],
-                                                                         outputs=[previewimage])
-            preview_frame_num.change(fn=on_preview_frame_changed, inputs=[preview_frame_num, bt_destfiles, fake_preview, selected_enhancer, selected_face_detection,
-                                                                           max_face_distance, blend_ratio, bt_destfiles, chk_useclip, clip_text],
-                                                                         outputs=[previewimage], show_progress='hidden')
+            previewinputs = [preview_frame_num, bt_destfiles, fake_preview, selected_enhancer, selected_face_detection,
+                                max_face_distance, blend_ratio, bt_destfiles, chk_useclip, clip_text] 
+            bt_refresh_preview.click(fn=on_preview_frame_changed, inputs=previewinputs, outputs=[previewimage])            
+            fake_preview.change(fn=on_preview_frame_changed, inputs=previewinputs, outputs=[previewimage])
+            preview_frame_num.change(fn=on_preview_frame_changed, inputs=previewinputs, outputs=[previewimage], show_progress='hidden')
             bt_use_face_from_preview.click(fn=on_use_face_from_selected, show_progress='full', inputs=[bt_destfiles, preview_frame_num], outputs=[dynamic_face_selection, face_selection, target_faces])
+
             
             # Live Cam
             cam_toggle.change(fn=on_cam_toggle, inputs=[cam_toggle])
@@ -233,12 +256,16 @@ def run():
                 cam.stream(on_stream_swap_cam, inputs=[cam, selected_enhancer, blend_ratio], outputs=[fake_cam_image], show_progress="hidden")
 
             # Extras
+            start_cut_video.click(fn=on_cut_video, inputs=[files_to_process, cut_start_time, cut_end_time], outputs=[files_to_process, extra_files_output])
             start_extract_frames.click(fn=on_extract_frames, inputs=[files_to_process], outputs=[files_to_process, extra_files_output])
             start_create_gif.click(fn=on_create_gif, inputs=[files_to_process], outputs=[files_to_process, extra_files_output])
 
             # Settings
+            for s in settings_controls:
+                s.select(fn=on_settings_changed)
+
             button_clean_temp.click(fn=clean_temp, outputs=[bt_srcimg, input_faces, target_faces, bt_destfiles])
-            button_apply_settings.click(apply_settings, inputs=[themes, input_server_name, input_server_port, share_checkbox, selected_image_format, selected_video_format, clear_output])
+            button_apply_settings.click(apply_settings, inputs=[themes, input_server_name, input_server_port])
             button_apply_restart.click(restart)
 
 
@@ -256,6 +283,31 @@ def run():
             print("Keyboard interruption in main thread... closing server.")
             run_server = False
         ui.close()
+
+
+def on_settings_changed(evt: gr.SelectData):
+    if isinstance(evt.target, gr.Checkbox):
+        if evt.value == 'Public Server':
+            roop.globals.CFG.server_share = evt.selected
+        elif evt.value == 'Clear output folder before each run':
+            roop.globals.CFG.clear_output = evt.selected
+        else:
+            raise 'Unhandled Setting!'
+    elif isinstance(evt.target, gr.Dropdown):
+        if evt.target.label == 'Image Output Format':
+            roop.globals.CFG.output_image_format = evt.target.value
+        elif evt.target.label == 'Video Output Format':
+            roop.globals.CFG.output_video_format = evt.target.value
+        elif evt.target.label == 'Video Codec':
+            roop.globals.CFG.output_video_codec = evt.target.value
+        else:
+            raise 'Unhandled Setting!'
+
+
+    # roop.globals.CFG.server_port = input_server_port
+    # roop.globals.CFG.server_share = input_server_public
+    # roop.globals.CFG.output_image_format = selected_image_format
+    # roop.globals.CFG.output_video_format = selected_video_format
 
 
 def on_srcimg_changed(imgsrc, progress=gr.Progress()):
@@ -444,13 +496,12 @@ def translate_swap_mode(dropdown_text):
         
 
 
-def start_swap(enhancer, clear_output, detection, keep_fps, keep_frames, skip_audio, face_distance, blend_ratio, target_files, use_clip, clip_text):
+def start_swap(enhancer, detection, keep_fps, keep_frames, skip_audio, face_distance, blend_ratio, target_files, use_clip, clip_text):
     from roop.core import batch_process
 
     if target_files is None or len(target_files) <= 0:
         return None, None
     
-    roop.globals.CFG.clear_output = clear_output
     if roop.globals.CFG.clear_output:
         shutil.rmtree(roop.globals.output_path)
         
@@ -531,11 +582,24 @@ def on_stream_swap_cam(camimage, enhancer, blend_ratio):
     return current_cam_image
 
 
+def on_cut_video(files, cut_start_frame, cut_end_frame):
+    resultfiles = []
+    for tf in files:
+        f = tf.name
+        # destfile = get_destfilename_from_path(f, resolve_relative_path('./output'), '_cut')
+        destfile = get_destfilename_from_path(f, './output', '_cut')
+        cut_video(f, destfile, cut_start_frame, cut_end_frame)
+        if os.path.isfile(destfile):
+            resultfiles.append(destfile)
+        else:
+            gr.Error('Cutting video failed!')
+    return None, resultfiles
+
 def on_extract_frames(files):
     resultfiles = []
     for tf in files:
         f = tf.name
-        resfolder = roop.utilities.extract_frames(f)
+        resfolder = extract_frames(f)
         for file in os.listdir(resfolder):
             outfile = os.path.join(resfolder, file)
             if os.path.isfile(outfile):
@@ -569,13 +633,10 @@ def clean_temp():
     return None,None,None,None
 
 
-def apply_settings(themes, input_server_name, input_server_port, input_server_public, selected_image_format, selected_video_format, clear_output):
+def apply_settings(themes, input_server_name, input_server_port):
     roop.globals.CFG.selected_theme = themes
     roop.globals.CFG.server_name = input_server_name
     roop.globals.CFG.server_port = input_server_port
-    roop.globals.CFG.server_share = input_server_public
-    roop.globals.CFG.output_image_format = selected_image_format
-    roop.globals.CFG.output_video_format = selected_video_format
     roop.globals.CFG.save()
     gr.Info('Settings saved')
 
@@ -588,4 +649,6 @@ def restart():
 
 # Gradio wants Images in RGB
 def convert_to_gradio(image):
+    if image is None:
+        return None
     return cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
