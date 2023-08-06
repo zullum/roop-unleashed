@@ -19,9 +19,9 @@ class Settings:
             with open(self.config_file, 'r') as f:
                 data = yaml.load(f, Loader=yaml.FullLoader)
         except:
-            pass
+            data = None
 
-        self.selected_theme = self.default_get(data, 'selected_theme', "gstaff/xkcd")
+        self.selected_theme = self.default_get(data, 'selected_theme', "Default")
         self.server_name = self.default_get(data, 'server_name', "")
         self.server_port = self.default_get(data, 'server_port', 0)
         self.server_share = self.default_get(data, 'server_share', True)
