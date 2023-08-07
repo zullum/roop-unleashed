@@ -1,11 +1,7 @@
+import roop.globals
+
 from threading import Thread
-
 from chain_img_processor import ChainImgProcessor
-
-
-#version = "1.0.0"
-
-
 
 class ThreadWithReturnValue(Thread):
 
@@ -70,7 +66,7 @@ class ChainVideoProcessor(ChainImgProcessor):
             locks.append(False)
 
         temp = []
-        with FFMPEG_VideoWriter(target_video, (width, height), fps, codec=self.video_save_codec, crf=self.video_save_crf, audiofile=video_audio) as output_video_ff:
+        with FFMPEG_VideoWriter(target_video, (width, height), fps, codec=roop.globals.video_encoder, crf=roop.globals.video_quality, audiofile=video_audio) as output_video_ff:
             with tqdm(total=frame_count, desc='Processing', unit="frame", dynamic_ncols=True,
                       bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}{postfix}]') as progress:
 

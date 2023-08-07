@@ -2,15 +2,14 @@ import os
 import time
 import gradio as gr
 import cv2
-import roop.globals
-import roop.metadata
 import pathlib
 import shutil
+import roop.globals
+import roop.metadata
+import roop.utilities as util
 
 from roop.face_helper import extract_face_images
 from roop.capturer import get_video_frame, get_video_frame_total, get_image_frame
-from roop.utilities import is_image, is_video, create_version_html, get_destfilename_from_path, create_gif_from_video, extract_frames, cut_video, resolve_relative_path
-from settings import Settings
 
 restart_server = False
 live_cam_active = False
@@ -58,6 +57,7 @@ def prepare_environment():
 
 
 def run():
+    from roop.core import suggest_execution_providers
     global input_faces, target_faces, face_selection, fake_cam_image, restart_server, live_cam_active, on_settings_changed
 
     prepare_environment()
@@ -66,14 +66,15 @@ def run():
     image_formats = ['jpg','png', 'webp']
     video_formats = ['avi','mkv', 'mp4', 'webm']
     video_codecs = ['libx264', 'libx265', 'libvpx-vp9', 'h264_nvenc', 'hevc_nvenc']
-
+    providerlist = suggest_execution_providers()
+    
     server_name = roop.globals.CFG.server_name
     if server_name is None or len(server_name) < 1:
         server_name = None
     server_port = roop.globals.CFG.server_port
     if server_port <= 0:
         server_port = None
-
+        
     settings_controls = []
 
     live_cam_active = False
@@ -83,7 +84,7 @@ def run():
         with gr.Blocks(title=f'{roop.metadata.name} {roop.metadata.version}', theme=roop.globals.CFG.selected_theme, css="span {color: var(--block-info-text-color)}") as ui:
             with gr.Row(variant='panel'):
                     gr.Markdown(f"### [{roop.metadata.name} {roop.metadata.version}](https://github.com/C0untFloyd/roop-unleashed)")
-                    gr.HTML(create_version_html(), elem_id="versions")
+                    gr.HTML(util.create_version_html(), elem_id="versions")
             with gr.Tab("Face Swap"):
                 with gr.Row():
                     with gr.Column():
@@ -177,6 +178,14 @@ def run():
                             with gr.Column():
                                 start_cut_video = gr.Button("Start")
 
+    #                     with gr.Row(variant='panel'):
+    #                         with gr.Column():
+    #                             gr.Markdown("""
+    #                                         # Join videos
+    #                                         This also re-encodes the videos like cutting above.
+    # """)
+    #                         with gr.Column():
+    #                             start_join_videos = gr.Button("Start")
                         with gr.Row(variant='panel'):
                             gr.Markdown("Extract frames from video")
                             start_extract_frames = gr.Button("Start")
@@ -195,31 +204,26 @@ def run():
                     with gr.Column():
                         themes = gr.Dropdown(available_themes, label="Theme", info="Change needs complete restart", value=roop.globals.CFG.selected_theme)
                     with gr.Column():
-                        settings_controls.append(gr.Checkbox(label="Public Server", value=roop.globals.CFG.server_share, interactive=True))
-                        settings_controls.append(gr.Checkbox(label='Clear output folder before each run', value=roop.globals.CFG.output_image_format, interactive=True))
+                        settings_controls.append(gr.Checkbox(label="Public Server", value=roop.globals.CFG.server_share, elem_id='server_share', interactive=True))
+                        settings_controls.append(gr.Checkbox(label='Clear output folder before each run', value=roop.globals.CFG.clear_output, elem_id='clear_output', interactive=True))
                     with gr.Column():
                         input_server_name = gr.Textbox(label="Server Name", lines=1, info="Leave blank to run locally", value=roop.globals.CFG.server_name)
                     with gr.Column():
                         input_server_port = gr.Number(label="Server Port", precision=0, info="Leave at 0 to use default", value=roop.globals.CFG.server_port)
                 with gr.Row():
                     with gr.Column():
-                        gr.Slider(1, 64, value=8, label="Max. Number of Threads", info='default: 8', step=1.0, interactive=True)
-                    with gr.Column():
-                        settings_controls.append(gr.Dropdown(image_formats, label="Image Output Format", info='default: png', value=roop.globals.CFG.output_image_format, interactive=True))
-                    with gr.Column():
-                        settings_controls.append(gr.Dropdown(video_formats, label="Video Output Format", info='default: mp4', value=roop.globals.CFG.output_video_format, interactive=True))
-                    with gr.Column():
-                        settings_controls.append(gr.Dropdown(video_codecs, label="Video Codec", info='default: libx264', value=roop.globals.CFG.output_video_codec, interactive=True))
-                        gr.Slider(0, 100, value=14, label="Video Quality (crf)", info='default: 14', step=1.0, interactive=True)
-                with gr.Row():
-                    with gr.Column():
-                        gr.Markdown(' ')
-                    with gr.Column():
+                        max_threads = gr.Slider(1, 64, value=roop.globals.CFG.max_threads, label="Max. Number of Threads", info='default: 8', step=1.0, interactive=True)
+                        settings_controls.append(gr.Dropdown(image_formats, label="Image Output Format", info='default: png', value=roop.globals.CFG.output_image_format, elem_id='output_image_format', interactive=True))
                         button_clean_temp = gr.Button("Clean temp folder")
                     with gr.Column():
+                        settings_controls.append(gr.Dropdown(providerlist, label="Provider", value=roop.globals.CFG.provider, elem_id='provider', interactive=True))
+                        settings_controls.append(gr.Dropdown(video_formats, label="Video Output Format", info='default: mp4', value=roop.globals.CFG.output_video_format, elem_id='output_video_format', interactive=True))
                         button_apply_settings = gr.Button("Apply Settings")
                     with gr.Column():
-                        button_apply_restart = gr.Button("Restart Server")
+                        settings_controls.append(gr.Dropdown(video_codecs, label="Video Codec", info='default: libx264', value=roop.globals.CFG.output_video_codec, elem_id='output_video_codec', interactive=True))
+                        video_quality = gr.Slider(0, 100, value=roop.globals.CFG.video_quality, label="Video Quality (crf)", info='default: 14', step=1.0, interactive=True)
+                    with gr.Column():
+                        button_apply_restart = gr.Button("Restart Server", variant='primary')
 
             input_faces.select(on_select_input_face, None, None)
             bt_remove_selected_input_face.click(fn=remove_selected_input_face, outputs=[input_faces])
@@ -256,13 +260,16 @@ def run():
                 cam.stream(on_stream_swap_cam, inputs=[cam, selected_enhancer, blend_ratio], outputs=[fake_cam_image], show_progress="hidden")
 
             # Extras
-            start_cut_video.click(fn=on_cut_video, inputs=[files_to_process, cut_start_time, cut_end_time], outputs=[files_to_process, extra_files_output])
-            start_extract_frames.click(fn=on_extract_frames, inputs=[files_to_process], outputs=[files_to_process, extra_files_output])
-            start_create_gif.click(fn=on_create_gif, inputs=[files_to_process], outputs=[files_to_process, extra_files_output])
+            start_cut_video.click(fn=on_cut_video, inputs=[files_to_process, cut_start_time, cut_end_time], outputs=[extra_files_output])
+            # start_join_videos.click(fn=on_join_videos, inputs=[files_to_process], outputs=[extra_files_output])
+            start_extract_frames.click(fn=on_extract_frames, inputs=[files_to_process], outputs=[extra_files_output])
+            start_create_gif.click(fn=on_create_gif, inputs=[files_to_process], outputs=[extra_files_output])
 
             # Settings
             for s in settings_controls:
                 s.select(fn=on_settings_changed)
+            max_threads.input(fn=lambda a,b='max_threads':on_settings_changed_misc(a,b), inputs=[max_threads])
+            video_quality.input(fn=lambda a,b='video_quality':on_settings_changed_misc(a,b), inputs=[video_quality])
 
             button_clean_temp.click(fn=clean_temp, outputs=[bt_srcimg, input_faces, target_faces, bt_destfiles])
             button_apply_settings.click(apply_settings, inputs=[themes, input_server_name, input_server_port])
@@ -284,30 +291,27 @@ def run():
             run_server = False
         ui.close()
 
+def on_settings_changed_misc(new_val, attribname):
+    if hasattr(roop.globals.CFG, attribname):
+        setattr(roop.globals.CFG, attribname, new_val)
+    else:
+        print("Didn't find attrib!")
+        
+
 
 def on_settings_changed(evt: gr.SelectData):
+    attribname = evt.target.elem_id
     if isinstance(evt.target, gr.Checkbox):
-        if evt.value == 'Public Server':
-            roop.globals.CFG.server_share = evt.selected
-        elif evt.value == 'Clear output folder before each run':
-            roop.globals.CFG.clear_output = evt.selected
-        else:
-            raise 'Unhandled Setting!'
+        if hasattr(roop.globals.CFG, attribname):
+            setattr(roop.globals.CFG, attribname, evt.selected)
+            return
     elif isinstance(evt.target, gr.Dropdown):
-        if evt.target.label == 'Image Output Format':
-            roop.globals.CFG.output_image_format = evt.target.value
-        elif evt.target.label == 'Video Output Format':
-            roop.globals.CFG.output_video_format = evt.target.value
-        elif evt.target.label == 'Video Codec':
-            roop.globals.CFG.output_video_codec = evt.target.value
-        else:
-            raise 'Unhandled Setting!'
+        if hasattr(roop.globals.CFG, attribname):
+            setattr(roop.globals.CFG, attribname, evt.value)
+            return
+            
+    raise gr.Error(f'Unhandled Setting for {evt.target}')
 
-
-    # roop.globals.CFG.server_port = input_server_port
-    # roop.globals.CFG.server_share = input_server_public
-    # roop.globals.CFG.output_image_format = selected_image_format
-    # roop.globals.CFG.output_video_format = selected_video_format
 
 
 def on_srcimg_changed(imgsrc, progress=gr.Progress()):
@@ -323,7 +327,7 @@ def on_srcimg_changed(imgsrc, progress=gr.Progress()):
     progress(0, desc="Retrieving faces from image", )      
     source_path = imgsrc
     thumbs = []
-    if is_image(source_path):
+    if util.is_image(source_path):
         roop.globals.source_path = source_path
         RECENT_DIRECTORY_SOURCE = os.path.dirname(roop.globals.source_path)
         SELECTION_FACES_DATA = extract_face_images(roop.globals.source_path,  (False, 0))
@@ -342,7 +346,6 @@ def on_srcimg_changed(imgsrc, progress=gr.Progress()):
         return gr.Column.update(visible=False), None, input_thumbs
        
     return gr.Column.update(visible=True), thumbs, gr.Gallery.update(visible=True)
-#        bt_srcimg.change( inputs=bt_srcimg, outputs=[bt_srcimg, dynamic_face_selection, face_selection, input_faces])
 
 def on_select_input_face(evt: gr.SelectData):
     global SELECTED_INPUT_FACE_INDEX
@@ -382,7 +385,7 @@ def on_use_face_from_selected(files, frame_num):
     thumbs = []
     
     roop.globals.target_path = files[selected_preview_index].name
-    if is_image(roop.globals.target_path) and not roop.globals.target_path.lower().endswith(('gif')):
+    if util.is_image(roop.globals.target_path) and not roop.globals.target_path.lower().endswith(('gif')):
         SELECTION_FACES_DATA = extract_face_images(roop.globals.target_path,  (False, 0))
         if len(SELECTION_FACES_DATA) > 0:
             for f in SELECTION_FACES_DATA:
@@ -392,7 +395,7 @@ def on_use_face_from_selected(files, frame_num):
             gr.Info('No faces detected!')
             roop.globals.target_path = None
                 
-    elif is_video(roop.globals.target_path) or roop.globals.target_path.lower().endswith(('gif')):
+    elif util.is_video(roop.globals.target_path) or roop.globals.target_path.lower().endswith(('gif')):
         selected_frame = frame_num
         SELECTION_FACES_DATA = extract_face_images(roop.globals.target_path, (True, selected_frame))
         if len(SELECTION_FACES_DATA) > 0:
@@ -440,7 +443,7 @@ def on_preview_frame_changed(frame_num, files, fake_preview, enhancer, detection
     from roop.core import live_swap
 
     filename = files[selected_preview_index].name
-    if is_video(filename) or filename.lower().endswith('gif'):
+    if util.is_video(filename) or filename.lower().endswith('gif'):
         current_frame = get_video_frame(filename, frame_num)
     else:
         current_frame = get_image_frame(filename)
@@ -458,6 +461,7 @@ def on_preview_frame_changed(frame_num, files, fake_preview, enhancer, detection
     if use_clip and clip_text is None or len(clip_text) < 1:
         use_clip = False
 
+    roop.globals.execution_threads = roop.globals.CFG.max_threads
     current_frame = live_swap(current_frame, roop.globals.face_swap_mode, use_clip, clip_text)
     if current_frame is None:
         return None 
@@ -522,6 +526,10 @@ def start_swap(enhancer, detection, keep_fps, keep_frames, skip_audio, face_dist
         if roop.globals.SELECTED_FACE_DATA_OUTPUT is None or len(roop.globals.SELECTED_FACE_DATA_OUTPUT) < 1:
             gr.Error('No Target Face selected!')
             return None, None
+            
+    roop.globals.execution_threads = roop.globals.CFG.max_threads
+    roop.globals.video_encoder = roop.globals.CFG.output_video_codec
+    roop.globals.video_quality = roop.globals.CFG.video_quality
 
     batch_process([file.name for file in target_files], use_clip, clip_text)
     outdir = pathlib.Path(roop.globals.output_path)
@@ -537,7 +545,7 @@ def on_destfiles_selected(evt: gr.SelectData, target_files):
 
     selected_preview_index = evt.index
     filename = target_files[selected_preview_index].name
-    if is_video(filename) or filename.lower().endswith('gif'):
+    if util.is_video(filename) or filename.lower().endswith('gif'):
         current_frame = get_video_frame(filename, 0)
         total_frames = get_video_frame_total(filename)
     else:
@@ -551,7 +559,7 @@ def on_destfiles_selected(evt: gr.SelectData, target_files):
 def on_resultfiles_selected(evt: gr.SelectData, files):
     selected_index = evt.index
     filename = files[selected_index].name
-    if is_video(filename) or filename.lower().endswith('gif'):
+    if util.is_video(filename) or filename.lower().endswith('gif'):
         current_frame = get_video_frame(filename, 0)
     else:
         current_frame = get_image_frame(filename)
@@ -587,33 +595,49 @@ def on_cut_video(files, cut_start_frame, cut_end_frame):
     for tf in files:
         f = tf.name
         # destfile = get_destfilename_from_path(f, resolve_relative_path('./output'), '_cut')
-        destfile = get_destfilename_from_path(f, './output', '_cut')
-        cut_video(f, destfile, cut_start_frame, cut_end_frame)
+        destfile = util.get_destfilename_from_path(f, './output', '_cut')
+        util.cut_video(f, destfile, cut_start_frame, cut_end_frame)
         if os.path.isfile(destfile):
             resultfiles.append(destfile)
         else:
             gr.Error('Cutting video failed!')
-    return None, resultfiles
+    return resultfiles
+
+def on_join_videos(files):
+    filenames = []
+    for f in files:
+        filenames.append(f.name)
+    destfile = util.get_destfilename_from_path(filenames[0], './output', '_join')        
+    util.join_videos(filenames, destfile)
+    resultfiles = []
+    if os.path.isfile(destfile):
+        resultfiles.append(destfile)
+    else:
+        gr.Error('Joining videos failed!')
+    return resultfiles
+
+
+
 
 def on_extract_frames(files):
     resultfiles = []
     for tf in files:
         f = tf.name
-        resfolder = extract_frames(f)
+        resfolder = util.extract_frames(f)
         for file in os.listdir(resfolder):
             outfile = os.path.join(resfolder, file)
             if os.path.isfile(outfile):
                 resultfiles.append(outfile)
-    return None, resultfiles
+    return resultfiles
 
 
 def on_create_gif(files):
     for tf in files:
         f = tf.name
-        gifname = get_destfilename_from_path(f, './output', '.gif')
-        create_gif_from_video(f, gifname)
+        gifname = util.get_destfilename_from_path(f, './output', '.gif')
+        util.create_gif_from_video(f, gifname)
     
-    return None, gifname
+    return gifname
 
 
 

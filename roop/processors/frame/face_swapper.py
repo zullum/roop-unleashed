@@ -6,7 +6,7 @@ import threading
 import roop.globals
 import roop.processors.frame.core
 from roop.core import update_status
-from roop.face_analyser import get_one_face, get_many_faces
+from roop.face_analyser import get_first_face, get_all_faces
 from roop.typing import Face, Frame
 from roop.utilities import conditional_download, resolve_relative_path, is_image, is_video, compute_cosine_distance, get_destfilename_from_path
 
@@ -37,7 +37,7 @@ def pre_start() -> bool:
     if not is_image(roop.globals.source_path):
         update_status('Select an image for source path.', NAME)
         return False
-    elif not get_one_face(cv2.imread(roop.globals.source_path)):
+    elif not get_first_face(cv2.imread(roop.globals.source_path)):
         update_status('No face in source path detected.', NAME)
         return False
     if not is_image(roop.globals.target_path) and not is_video(roop.globals.target_path):
@@ -60,7 +60,7 @@ def process_frame(source_face: Face, target_face: Face, temp_frame: Frame) -> Fr
     global DIST_THRESHOLD
 
     if roop.globals.many_faces:
-        many_faces = get_many_faces(temp_frame)
+        many_faces = get_all_faces(temp_frame)
         if many_faces:
             for target_face in many_faces:
                 if target_face['det_score'] > 0.65:
@@ -68,7 +68,7 @@ def process_frame(source_face: Face, target_face: Face, temp_frame: Frame) -> Fr
     else:
         if target_face:
             target_embedding = target_face.embedding
-            many_faces = get_many_faces(temp_frame)
+            many_faces = get_all_faces(temp_frame)
             target_face = None
             for dest_face in many_faces:
                 dest_embedding = dest_face.embedding
@@ -79,7 +79,7 @@ def process_frame(source_face: Face, target_face: Face, temp_frame: Frame) -> Fr
                 temp_frame = swap_face(source_face, target_face, temp_frame)
             return temp_frame
                     
-        target_face = get_one_face(temp_frame)
+        target_face = get_first_face(temp_frame)
         if target_face:
             temp_frame = swap_face(source_face, target_face, temp_frame)
     return temp_frame

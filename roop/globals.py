@@ -1,3 +1,4 @@
+from settings import Settings
 from typing import List
 
 source_path = None
@@ -20,7 +21,7 @@ max_memory = None
 execution_providers: List[str] = []
 execution_threads = None
 headless = None
-log_level = 'debug'
+log_level = 'error'
 selected_enhancer = None
 face_swap_mode = None
 blend_ratio = 0.5
@@ -35,6 +36,6 @@ IMAGE_CHAIN_PROCESSOR = None
 VIDEO_CHAIN_PROCESSOR = None
 BATCH_IMAGE_CHAIN_PROCESSOR = None
 
-CFG = None
+CFG: Settings = None
 
 

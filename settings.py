@@ -28,8 +28,10 @@ class Settings:
         self.output_image_format = self.default_get(data, 'output_image_format', 'png')
         self.output_video_format = self.default_get(data, 'output_video_format', 'mp4')
         self.output_video_codec = self.default_get(data, 'output_video_codec', 'libx264')
+        self.video_quality = self.default_get(data, 'video_quality', 14)
         self.clear_output = self.default_get(data, 'clear_output', True)
         self.max_threads = self.default_get(data, 'max_threads', 8)
+        self.provider = self.default_get(data, 'provider', 'cuda')
 
 
 
@@ -42,8 +44,10 @@ class Settings:
             'output_image_format' : self.output_image_format,
             'output_video_format' : self.output_video_format,
             'output_video_codec' : self.output_video_codec,
+            'video_quality' : self.video_quality,
             'clear_output' : self.clear_output,
-            'max_threads' : 8
+            'max_threads' : self.max_threads,
+            'provider' : self.provider
         }
         with open(self.config_file, 'w') as f:
             yaml.dump(data, f)

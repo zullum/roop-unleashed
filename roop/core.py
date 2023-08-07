@@ -17,9 +17,9 @@ import onnxruntime
 
 import roop.globals
 import roop.metadata
+import roop.utilities as util
 import roop.ui as ui
 from settings import Settings
-from roop.utilities import has_image_extension, is_video, detect_fps, create_video, extract_frames, create_gif_from_video, get_temp_frame_paths, restore_audio, create_temp, clean_temp, normalize_output_path, has_extension, get_destfilename_from_path, resolve_relative_path, conditional_download
 from roop.face_helper import extract_face_images
 from chain_img_processor import ChainImgProcessor, ChainVideoProcessor, ChainBatchImageProcessor
 
@@ -58,7 +58,7 @@ def parse_args() -> None:
 
     roop.globals.source_path = args.source_path
     roop.globals.target_path = args.target_path
-    roop.globals.output_path = normalize_output_path(roop.globals.source_path, roop.globals.target_path, args.output_path)
+    roop.globals.output_path = util.normalize_output_path(roop.globals.source_path, roop.globals.target_path, args.output_path)
     roop.globals.target_folder_path = args.target_folder_path
     roop.globals.headless = args.source_path or args.target_path or args.output_path
     # Always enable all processors when using GUI
@@ -138,19 +138,19 @@ def pre_check() -> bool:
         update_status('Python version is not supported - please upgrade to 3.9 or higher.')
         return False
     
-    download_directory_path = resolve_relative_path('../models')
-    conditional_download(download_directory_path, ['https://huggingface.co/countfloyd/deepfake/resolve/main/inswapper_128.onnx'])
-    conditional_download(download_directory_path, ['https://huggingface.co/countfloyd/deepfake/resolve/main/GFPGANv1.4.pth'])
-    conditional_download(download_directory_path, ['https://github.com/csxmli2016/DMDNet/releases/download/v1/DMDNet.pth'])
-    download_directory_path = resolve_relative_path('../models/CLIP')
-    conditional_download(download_directory_path, ['https://huggingface.co/countfloyd/deepfake/resolve/main/rd64-uni-refined.pth'])
-    download_directory_path = resolve_relative_path('../models/CodeFormer')
-    conditional_download(download_directory_path, ['https://github.com/sczhou/CodeFormer/releases/download/v0.1.0/codeformer.pth'])
-    download_directory_path = resolve_relative_path('../models/CodeFormer/facelib')
-    conditional_download(download_directory_path, ['https://github.com/sczhou/CodeFormer/releases/download/v0.1.0/detection_Resnet50_Final.pth'])
-    conditional_download(download_directory_path, ['https://github.com/sczhou/CodeFormer/releases/download/v0.1.0/parsing_parsenet.pth'])
-    download_directory_path = resolve_relative_path('../models/CodeFormer/realesrgan')
-    conditional_download(download_directory_path, ['https://github.com/sczhou/CodeFormer/releases/download/v0.1.0/RealESRGAN_x2plus.pth'])
+    download_directory_path = util.resolve_relative_path('../models')
+    util.conditional_download(download_directory_path, ['https://huggingface.co/countfloyd/deepfake/resolve/main/inswapper_128.onnx'])
+    util.conditional_download(download_directory_path, ['https://huggingface.co/countfloyd/deepfake/resolve/main/GFPGANv1.4.pth'])
+    util.conditional_download(download_directory_path, ['https://github.com/csxmli2016/DMDNet/releases/download/v1/DMDNet.pth'])
+    download_directory_path = util.resolve_relative_path('../models/CLIP')
+    util.conditional_download(download_directory_path, ['https://huggingface.co/countfloyd/deepfake/resolve/main/rd64-uni-refined.pth'])
+    download_directory_path = util.resolve_relative_path('../models/CodeFormer')
+    util.conditional_download(download_directory_path, ['https://github.com/sczhou/CodeFormer/releases/download/v0.1.0/codeformer.pth'])
+    download_directory_path = util.resolve_relative_path('../models/CodeFormer/facelib')
+    util.conditional_download(download_directory_path, ['https://github.com/sczhou/CodeFormer/releases/download/v0.1.0/detection_Resnet50_Final.pth'])
+    util.conditional_download(download_directory_path, ['https://github.com/sczhou/CodeFormer/releases/download/v0.1.0/parsing_parsenet.pth'])
+    download_directory_path = util.resolve_relative_path('../models/CodeFormer/realesrgan')
+    util.conditional_download(download_directory_path, ['https://github.com/sczhou/CodeFormer/releases/download/v0.1.0/RealESRGAN_x2plus.pth'])
 
     if not shutil.which('ffmpeg'):
        update_status('ffmpeg is not installed.')
@@ -168,7 +168,7 @@ def start() -> None:
     if roop.globals.headless:
         faces = extract_face_images(roop.globals.source_path,  (False, 0))
         roop.globals.SELECTED_FACE_DATA_INPUT = faces[roop.globals.source_face_index]
-        faces = extract_face_images(roop.globals.target_path,  (False, has_image_extension(roop.globals.target_path)))
+        faces = extract_face_images(roop.globals.target_path,  (False, util.has_image_extension(roop.globals.target_path)))
         roop.globals.SELECTED_FACE_DATA_OUTPUT = faces[roop.globals.target_face_index]
         if 'face_enhancer' in roop.globals.frame_processors:
             roop.globals.selected_enhancer = 'GFPGAN'
@@ -260,12 +260,12 @@ def batch_process(files, use_clip, new_clip_text) -> None:
             fullname = os.path.join(roop.globals.target_folder_path, f)
         else:
             fullname = f
-        if has_image_extension(fullname):
+        if util.has_image_extension(fullname):
             imagefiles.append(fullname)
-            imagefinalnames.append(get_destfilename_from_path(fullname, roop.globals.output_path, f'_fake.{roop.globals.CFG.output_image_format}'))
-        elif is_video(fullname) or has_extension(fullname, ['gif']):
+            imagefinalnames.append(util.get_destfilename_from_path(fullname, roop.globals.output_path, f'_fake.{roop.globals.CFG.output_image_format}'))
+        elif util.is_video(fullname) or util.has_extension(fullname, ['gif']):
             videofiles.append(fullname)
-            videofinalnames.append(get_destfilename_from_path(fullname, roop.globals.output_path, f'_fake.{roop.globals.CFG.output_video_format}'))
+            videofinalnames.append(util.get_destfilename_from_path(fullname, roop.globals.output_path, f'_fake.{roop.globals.CFG.output_video_format}'))
 
 
     if(len(imagefiles) > 0):
@@ -274,27 +274,27 @@ def batch_process(files, use_clip, new_clip_text) -> None:
     if(len(videofiles) > 0):
         for index,v in enumerate(videofiles):
             update_status(f'Processing video {v}')
-            fps = detect_fps(v)
+            fps = util.detect_fps(v)
             if roop.globals.keep_frames:
                 update_status('Creating temp resources...')
-                create_temp(v)
+                util.create_temp(v)
                 update_status('Extracting frames...')
-                extract_frames(v)
-                temp_frame_paths = get_temp_frame_paths(v)
+                util.extract_frames(v)
+                temp_frame_paths = util.get_temp_frame_paths(v)
                 roop.globals.BATCH_IMAGE_CHAIN_PROCESSOR.run_batch_chain(temp_frame_paths, temp_frame_paths, roop.globals.execution_threads, processors, params_gen_func)
                 update_status(f'Creating video with {fps} FPS...')
-                create_video(v, videofinalnames[index], fps)
+                util.create_video(v, videofinalnames[index], fps)
             else:
                 update_status(f'Creating video with {fps} FPS...')
-                roop.globals.VIDEO_CHAIN_PROCESSOR.run_video_chain(v,videofinalnames[index], fps, 8, processors, params_gen_func, roop.globals.target_path)
+                roop.globals.VIDEO_CHAIN_PROCESSOR.run_video_chain(v,videofinalnames[index], fps, roop.globals.execution_threads, processors, params_gen_func, roop.globals.target_path)
             if os.path.isfile(videofinalnames[index]):
-                if has_extension(v, ['gif']):
-                    gifname = get_destfilename_from_path(v, './output', '_fake.gif')
+                if util.has_extension(v, ['gif']):
+                    gifname = roop.utilities.get_destfilename_from_path(v, './output', '_fake.gif')
                     update_status('Creating final GIF')
-                    create_gif_from_video(videofinalnames[index], gifname)
+                    util.create_gif_from_video(videofinalnames[index], gifname)
                 elif not roop.globals.skip_audio:
-                    finalname = get_destfilename_from_path(videofinalnames[index], roop.globals.output_path, f'_final.{roop.globals.CFG.output_video_format}')
-                    restore_audio(videofinalnames[index], v, finalname)
+                    finalname = roop.utilities.get_destfilename_from_path(videofinalnames[index], roop.globals.output_path, f'_final.{roop.globals.CFG.output_video_format}')
+                    util.restore_audio(videofinalnames[index], v, finalname)
                     if os.path.isfile(videofinalnames[index]):
                         os.remove(videofinalnames[index])
             else:
@@ -307,7 +307,7 @@ def batch_process(files, use_clip, new_clip_text) -> None:
 
 def destroy() -> None:
     if roop.globals.target_path:
-        clean_temp(roop.globals.target_path)
+        util.clean_temp(roop.globals.target_path)
     sys.exit()
 
 
