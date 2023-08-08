@@ -167,9 +167,9 @@ def update_status(message: str, scope: str = 'ROOP.CORE') -> None:
 def start() -> None:
     if roop.globals.headless:
         faces = extract_face_images(roop.globals.source_path,  (False, 0))
-        roop.globals.SELECTED_FACE_DATA_INPUT = faces[roop.globals.source_face_index]
+        roop.globals.INPUT_FACES.append(faces[roop.globals.source_face_index])
         faces = extract_face_images(roop.globals.target_path,  (False, util.has_image_extension(roop.globals.target_path)))
-        roop.globals.SELECTED_FACE_DATA_OUTPUT = faces[roop.globals.target_face_index]
+        roop.globals.TARGET_FACES.append(faces[roop.globals.target_face_index])
         if 'face_enhancer' in roop.globals.frame_processors:
             roop.globals.selected_enhancer = 'GFPGAN'
        
@@ -214,7 +214,7 @@ def live_swap(frame, swap_mode, use_clip, clip_text):
                                                         "original_frame": frame,
                                                         "blend_ratio": roop.globals.blend_ratio,
                                                         "face_distance_threshold": roop.globals.distance_threshold,
-                                                        "input_face_datas": [roop.globals.SELECTED_FACE_DATA_INPUT], "target_face_datas": [roop.globals.SELECTED_FACE_DATA_OUTPUT],
+                                                        "input_face_datas": roop.globals.INPUT_FACES, "target_face_datas": roop.globals.TARGET_FACES,
                                                         "clip_prompt": clip_text},
                                                         processors)
     return temp_frame
@@ -226,7 +226,7 @@ def params_gen_func(proc, frame):
 
     return {"original_frame": frame, "blend_ratio": roop.globals.blend_ratio,
              "swap_mode": roop.globals.face_swap_mode, "face_distance_threshold": roop.globals.distance_threshold, 
-             "input_face_datas": [roop.globals.SELECTED_FACE_DATA_INPUT], "target_face_datas": [roop.globals.SELECTED_FACE_DATA_OUTPUT],
+             "input_face_datas": roop.globals.INPUT_FACES, "target_face_datas": roop.globals.TARGET_FACES,
              "clip_prompt": clip_text}
 
 def batch_process(files, use_clip, new_clip_text) -> None:

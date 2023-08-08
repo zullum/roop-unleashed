@@ -30,8 +30,10 @@ class Settings:
         self.output_video_codec = self.default_get(data, 'output_video_codec', 'libx264')
         self.video_quality = self.default_get(data, 'video_quality', 14)
         self.clear_output = self.default_get(data, 'clear_output', True)
+        self.live_cam_start_active = self.default_get(data, 'live_cam_start_active', False)
         self.max_threads = self.default_get(data, 'max_threads', 8)
         self.provider = self.default_get(data, 'provider', 'cuda')
+
 
 
 
@@ -46,6 +48,7 @@ class Settings:
             'output_video_codec' : self.output_video_codec,
             'video_quality' : self.video_quality,
             'clear_output' : self.clear_output,
+            'live_cam_start_active' : self.live_cam_start_active,
             'max_threads' : self.max_threads,
             'provider' : self.provider
         }

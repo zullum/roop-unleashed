@@ -77,11 +77,14 @@ def run():
         
     settings_controls = []
 
-    live_cam_active = False
+    live_cam_active = roop.globals.CFG.live_cam_start_active
     run_server = True
+    mycss = """
+        span {color: var(--block-info-text-color)}        
+"""
 
     while run_server:
-        with gr.Blocks(title=f'{roop.metadata.name} {roop.metadata.version}', theme=roop.globals.CFG.selected_theme, css="span {color: var(--block-info-text-color)}") as ui:
+        with gr.Blocks(title=f'{roop.metadata.name} {roop.metadata.version}', theme=roop.globals.CFG.selected_theme, css=mycss) as ui:
             with gr.Row(variant='panel'):
                     gr.Markdown(f"### [{roop.metadata.name} {roop.metadata.version}](https://github.com/C0untFloyd/roop-unleashed)")
                     gr.HTML(util.create_version_html(), elem_id="versions")
@@ -103,7 +106,7 @@ def run():
                         face_selection = gr.Gallery(label="Detected faces", allow_preview=True, preview=True, height=256, object_fit="scale-down")
                         with gr.Row():
                             bt_faceselect = gr.Button("Use selected face")
-                            bt_cancelfaceselect = gr.Button("Cancel")
+                            bt_cancelfaceselect = gr.Button("Done")
             
                 with gr.Row():
                     with gr.Column():
@@ -148,7 +151,7 @@ def run():
                 if live_cam_active:
                     with gr.Row():
                         with gr.Column():
-                            cam = gr.Webcam(label='Camera', source='webcam', interactive=True, streaming=False)
+                            cam = gr.Webcam(label='Camera', source='webcam', mirror_webcam=True, interactive=True, streaming=False)
                         with gr.Column():
                             fake_cam_image = gr.Image(label='Fake Camera Output', interactive=False)
 
@@ -224,6 +227,7 @@ def run():
                         video_quality = gr.Slider(0, 100, value=roop.globals.CFG.video_quality, label="Video Quality (crf)", info='default: 14', step=1.0, interactive=True)
                     with gr.Column():
                         button_apply_restart = gr.Button("Restart Server", variant='primary')
+                        settings_controls.append(gr.Checkbox(label='Start with active live cam', value=roop.globals.CFG.live_cam_start_active, elem_id='live_cam_start_active', interactive=True))
 
             input_faces.select(on_select_input_face, None, None)
             bt_remove_selected_input_face.click(fn=remove_selected_input_face, outputs=[input_faces])
@@ -238,7 +242,9 @@ def run():
             resultfiles.select(fn=on_resultfiles_selected, inputs=[resultfiles], outputs=[resultimage])
 
             face_selection.select(on_select_face, None, None)
-            bt_faceselect.click(fn=on_selected_face, outputs=[dynamic_face_selection, face_selection, input_faces, target_faces])
+            bt_faceselect.click(fn=on_selected_face, outputs=[input_faces, target_faces])
+            bt_cancelfaceselect.click(fn=on_end_face_selection, outputs=[dynamic_face_selection, face_selection])
+            
             bt_clear_input_faces.click(fn=on_clear_input_faces, outputs=[input_faces])
 
             bt_start.click(fn=start_swap, 
@@ -257,7 +263,7 @@ def run():
             # Live Cam
             cam_toggle.change(fn=on_cam_toggle, inputs=[cam_toggle])
             if live_cam_active:
-                cam.stream(on_stream_swap_cam, inputs=[cam, selected_enhancer, blend_ratio], outputs=[fake_cam_image], show_progress="hidden")
+                cam.stream(on_stream_swap_cam, inputs=[cam, selected_enhancer, blend_ratio], outputs=[fake_cam_image], preprocess=True, postprocess=True, show_progress="hidden")
 
             # Extras
             start_cut_video.click(fn=on_cut_video, inputs=[files_to_process, cut_start_time, cut_end_time], outputs=[extra_files_output])
@@ -341,7 +347,7 @@ def on_srcimg_changed(imgsrc, progress=gr.Progress()):
         raise gr.Error('No faces detected!')
 
     if len(thumbs) == 1:
-        roop.globals.SELECTED_FACE_DATA_INPUT = SELECTION_FACES_DATA[0][0]
+        roop.globals.INPUT_FACES.append(SELECTION_FACES_DATA[0][0])
         input_thumbs.append(thumbs[0])
         return gr.Column.update(visible=False), None, input_thumbs
        
@@ -355,6 +361,9 @@ def on_select_input_face(evt: gr.SelectData):
 def remove_selected_input_face():
     global input_thumbs, SELECTED_INPUT_FACE_INDEX
 
+    if len(roop.globals.INPUT_FACES) > SELECTED_INPUT_FACE_INDEX:
+        f = roop.globals.INPUT_FACES.pop(SELECTED_INPUT_FACE_INDEX)
+        del f
     if len(input_thumbs) > SELECTED_INPUT_FACE_INDEX:
         f = input_thumbs.pop(SELECTED_INPUT_FACE_INDEX)
         del f
@@ -369,6 +378,9 @@ def on_select_target_face(evt: gr.SelectData):
 def remove_selected_target_face():
     global target_thumbs, SELECTED_TARGET_FACE_INDEX
 
+    if len(roop.globals.TARGET_FACES) > SELECTED_TARGET_FACE_INDEX:
+        f = roop.globals.TARGET_FACES.pop(SELECTED_TARGET_FACE_INDEX)
+        del f
     if len(target_thumbs) > SELECTED_TARGET_FACE_INDEX:
         f = target_thumbs.pop(SELECTED_TARGET_FACE_INDEX)
         del f
@@ -407,7 +419,7 @@ def on_use_face_from_selected(files, frame_num):
             roop.globals.target_path = None
 
     if len(thumbs) == 1:
-        roop.globals.SELECTED_FACE_DATA_OUTPUT = SELECTION_FACES_DATA[0][0]
+        roop.globals.TARGET_FACES.append(SELECTION_FACES_DATA[0][0])
         target_thumbs.append(thumbs[0])
         return gr.Row.update(visible=False), None, target_thumbs
 
@@ -426,17 +438,18 @@ def on_selected_face():
     fd = SELECTION_FACES_DATA[SELECTED_FACE_INDEX]
     image = convert_to_gradio(fd[1])
     if IS_INPUT:
-        roop.globals.SELECTED_FACE_DATA_INPUT = fd[0]
+        roop.globals.INPUT_FACES.append(fd[0])
         input_thumbs.append(image)
-        return gr.Column.update(visible=False), None, input_thumbs, gr.Gallery.update(visible=True)
+        return input_thumbs, gr.Gallery.update(visible=True)
     else:
-        roop.globals.SELECTED_FACE_DATA_OUTPUT = fd[0]
+        roop.globals.TARGET_FACES.append(fd[0])
         target_thumbs.append(image)
-        return gr.Column.update(visible=False), None, gr.Gallery.update(visible=True), target_thumbs
+        return gr.Gallery.update(visible=True), target_thumbs
     
 #        bt_faceselect.click(fn=on_selected_face, outputs=[dynamic_face_selection, face_selection, input_faces, target_faces])
 
-
+def on_end_face_selection():
+    return gr.Column.update(visible=False), None
 
 
 def on_preview_frame_changed(frame_num, files, fake_preview, enhancer, detection, face_distance, blend_ratio, target_files, use_clip, clip_text):
@@ -450,7 +463,7 @@ def on_preview_frame_changed(frame_num, files, fake_preview, enhancer, detection
     if current_frame is None:
         return None 
 
-    if not fake_preview or roop.globals.SELECTED_FACE_DATA_INPUT is None:
+    if not fake_preview or len(roop.globals.INPUT_FACES) < 1:
         return convert_to_gradio(current_frame)
 
     roop.globals.face_swap_mode = translate_swap_mode(detection)
@@ -473,15 +486,15 @@ def on_preview_frame_changed(frame_num, files, fake_preview, enhancer, detection
 def on_clear_input_faces():
     global input_thumbs
     
-    input_thumbs = []
-    roop.globals.SELECTED_FACE_DATA_INPUT = None
+    input_thumbs.clear()
+    roop.globals.INPUT_FACES.clear()
     return input_thumbs
 
 def on_clear_destfiles():
     global target_thumbs
 
-    roop.globals.SELECTED_FACE_DATA_OUTPUT = None
-    target_thumbs = []
+    roop.globals.TARGET_FACES.clear()
+    target_thumbs.clear()
     return target_thumbs    
 
 
@@ -523,7 +536,7 @@ def start_swap(enhancer, detection, keep_fps, keep_frames, skip_audio, face_dist
         use_clip = False
     
     if roop.globals.face_swap_mode == 'selected':
-        if roop.globals.SELECTED_FACE_DATA_OUTPUT is None or len(roop.globals.SELECTED_FACE_DATA_OUTPUT) < 1:
+        if len(roop.globals.TARGET_FACES) < 1:
             gr.Error('No Target Face selected!')
             return None, None
             
@@ -582,11 +595,10 @@ def on_stream_swap_cam(camimage, enhancer, blend_ratio):
     roop.globals.selected_enhancer = enhancer
     roop.globals.blend_ratio = blend_ratio
 
-    if not cam_swapping and roop.globals.SELECTED_FACE_DATA_INPUT is not None:
+    if not cam_swapping and len(roop.globals.INPUT_FACES) > 0:
         cam_swapping = True
         current_cam_image = live_swap(camimage, "all", False, None)
         cam_swapping = False
-    
     return current_cam_image
 
 
@@ -649,9 +661,9 @@ def clean_temp():
     shutil.rmtree(os.environ["TEMP"])
     prepare_environment()
    
-    input_thumbs = []
-    roop.globals.SELECTED_FACE_DATA_INPUT = None
-    roop.globals.SELECTED_FACE_DATA_OUTPUT = None
+    input_thumbs.clear()
+    roop.globals.INPUT_FACES.clear()
+    roop.globals.TARGET_FACES.clear()
     target_thumbs = []
     gr.Info('Temp Files removed')
     return None,None,None,None
