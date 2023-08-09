@@ -6,7 +6,6 @@ import roop.globals
 from roop.typing import Frame, Face
 
 import cv2
-from PIL import Image
 from roop.capturer import get_video_frame
 from roop.utilities import resolve_relative_path, conditional_download
 
@@ -22,24 +21,26 @@ def get_face_analyser() -> Any:
     with THREAD_LOCK_ANALYSER:
         if FACE_ANALYSER is None:
             FACE_ANALYSER = insightface.app.FaceAnalysis(name='buffalo_l', providers=roop.globals.execution_providers)
-            FACE_ANALYSER.prepare(ctx_id=0, det_size=(640, 640))
+            FACE_ANALYSER.prepare(ctx_id=0, det_size=(640, 640) if roop.globals.default_det_size else (320,320))
     return FACE_ANALYSER
 
 
-def get_one_face(frame: Frame) -> Any:
+def get_first_face(frame: Frame) -> Any:
     try:
-        face = get_face_analyser().get(frame)
-        return min(face, key=lambda x: x.bbox[0])
-    except ValueError:
+        faces = get_face_analyser().get(frame)
+        return min(faces, key=lambda x: x.bbox[0])
+    #   return sorted(faces, reverse=True, key=lambda x: (x.bbox[2] - x.bbox[0]) * (x.bbox[3] - x.bbox[1]))[0]
+    except:
         return None
 
 
-def get_many_faces(frame: Frame) -> Any:
+def get_all_faces(frame: Frame) -> Any:
     try:
         faces = get_face_analyser().get(frame)
         return sorted(faces, key = lambda x : x.bbox[0])
-    except IndexError:
+    except:
         return None
+
 
 def extract_face_images(source_filename, video_info):
     face_data = []
@@ -55,7 +56,9 @@ def extract_face_images(source_filename, video_info):
         source_image = cv2.imread(source_filename)
 
         
-    faces = get_many_faces(source_image)
+    faces = get_all_faces(source_image)
+    if faces is None:
+        return face_data
 
     i = 0
     for face in faces:

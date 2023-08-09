@@ -8,7 +8,7 @@ import roop.globals
 import roop.metadata
 import roop.utilities as util
 
-from roop.face_helper import extract_face_images
+from roop.face_util import extract_face_images
 from roop.capturer import get_video_frame, get_video_frame_total, get_image_frame
 
 restart_server = False
@@ -109,22 +109,32 @@ def run():
                             bt_cancelfaceselect = gr.Button("Done")
             
                 with gr.Row():
-                    with gr.Column():
+                    with gr.Column(scale=1):
                         selected_face_detection = gr.Dropdown(["First found", "All faces", "Selected face", "All female", "All male"], value="First found", label="Select face swapping method")
                         max_face_distance = gr.Slider(0.01, 1.0, value=0.65, label="Max Face Similarity Threshold")
-                    with gr.Column():
+                    with gr.Column(scale=1):
+                        chk_det_size = gr.Checkbox(label="Use default Det-Size", value=True, elem_id='default_det_size', interactive=True)
+                    with gr.Column(scale=2):
                         roop.globals.keep_fps = gr.Checkbox(label="Keep FPS", value=True)
                         roop.globals.keep_frames = gr.Checkbox(label="Keep Frames", value=False)
                         roop.globals.skip_audio = gr.Checkbox(label="Skip audio", value=False)
                 with gr.Row():
                     with gr.Column():
                         selected_enhancer = gr.Dropdown(["None", "Codeformer", "DMDNet", "GFPGAN"], value="None", label="Select post-processing")
-                        with gr.Accordion(label="Masking", open=True):
-                            chk_useclip = gr.Checkbox(label="Use Text to Clip Masking", value=False)
-                            clip_text = gr.Textbox(label="List of objects to mask and restore back on fake image", placeholder="hands,hair")
-                            
                     with gr.Column():
                         blend_ratio = gr.Slider(0.0, 1.0, value=0.65, label="Original/Enhanced image blend ratio")
+                with gr.Row():
+                    with gr.Accordion(label="Masking", open=False):
+                        with gr.Row():
+                            with gr.Column(scale=1):
+                                chk_useclip = gr.Checkbox(label="Use Text Masking", value=False)
+                                clip_text = gr.Textbox(label="List of objects to mask and restore back on fake image", placeholder="cup,hands,hair,banana")
+                                gr.Dropdown(["Clip2Seg"], value="Clip2Seg", label="Engine")
+                            with gr.Column(scale=1):
+                                bt_preview_mask = gr.Button("Show Mask Preview", variant='secondary')
+                            with gr.Column(scale=2):
+                                maskpreview = gr.Image(label="Preview Mask", shape=(None,512), interactive=False)
+                            
                 with gr.Row(variant='panel'):
                     with gr.Column():
                         bt_start = gr.Button("Start", variant='primary')
@@ -142,9 +152,11 @@ def run():
                     with gr.Column():
                         with gr.Accordion(label="Preview Original/Fake Frame", open=True):
                             previewimage = gr.Image(label="Preview Image", interactive=False)
-                            with gr.Column():
-                                preview_frame_num = gr.Slider(0, 0, value=0, label="Frame Number", step=1.0)
-                                bt_use_face_from_preview = gr.Button("Use Face from this Frame", variant='primary')
+                            with gr.Row(variant='panel'):
+                                with gr.Column():
+                                    preview_frame_num = gr.Slider(0, 0, value=0, label="Frame Number", step=1.0)
+                                with gr.Column():
+                                    bt_use_face_from_preview = gr.Button("Use Face from this Frame", variant='primary')
                         
             with gr.Tab("Live Cam"):
                 cam_toggle = gr.Checkbox(label='Activate', value=live_cam_active)
@@ -247,6 +259,10 @@ def run():
             
             bt_clear_input_faces.click(fn=on_clear_input_faces, outputs=[input_faces])
 
+            chk_det_size.select(fn=on_option_changed)
+
+            bt_preview_mask.click(fn=on_preview_mask, inputs=[preview_frame_num, bt_destfiles, clip_text], outputs=[maskpreview]) 
+
             bt_start.click(fn=start_swap, 
                 inputs=[selected_enhancer, selected_face_detection, roop.globals.keep_fps, roop.globals.keep_frames,
                          roop.globals.skip_audio, max_face_distance, blend_ratio, bt_destfiles, chk_useclip, clip_text],
@@ -296,6 +312,21 @@ def run():
             print("Keyboard interruption in main thread... closing server.")
             run_server = False
         ui.close()
+
+
+
+def on_option_changed(evt: gr.SelectData):
+    attribname = evt.target.elem_id
+    if isinstance(evt.target, gr.Checkbox):
+        if hasattr(roop.globals, attribname):
+            setattr(roop.globals, attribname, evt.selected)
+            return
+    elif isinstance(evt.target, gr.Dropdown):
+        if hasattr(roop.globals, attribname):
+            setattr(roop.globals, attribname, evt.value)
+            return
+    raise gr.Error(f'Unhandled Setting for {evt.target}')
+
 
 def on_settings_changed_misc(new_val, attribname):
     if hasattr(roop.globals.CFG, attribname):
@@ -480,7 +511,20 @@ def on_preview_frame_changed(frame_num, files, fake_preview, enhancer, detection
         return None 
     return convert_to_gradio(current_frame)
 
+
+def on_preview_mask(frame_num, files, clip_text):
+    from roop.core import preview_mask
     
+    filename = files[selected_preview_index].name
+    if util.is_video(filename) or filename.lower().endswith('gif'):
+        current_frame = get_video_frame(filename, frame_num)
+    else:
+        current_frame = get_image_frame(filename)
+    if current_frame is None:
+        return None
+
+    current_frame = preview_mask(current_frame, clip_text)
+    return convert_to_gradio(current_frame)
 
 
 def on_clear_input_faces():

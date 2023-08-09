@@ -1,0 +1,12 @@
+clear_output: true
+live_cam_start_active: false
+max_threads: 8
+output_image_format: png
+output_video_codec: libx264
+output_video_format: mp4
+provider: cuda
+selected_theme: Default
+server_name: ''
+server_port: 0
+server_share: true
+video_quality: 14

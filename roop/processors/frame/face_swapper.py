@@ -6,7 +6,7 @@ import threading
 import roop.globals
 import roop.processors.frame.core
 from roop.core import update_status
-from roop.face_analyser import get_first_face, get_all_faces
+from roop.face_util import get_first_face, get_all_faces
 from roop.typing import Face, Frame
 from roop.utilities import conditional_download, resolve_relative_path, is_image, is_video, compute_cosine_distance, get_destfilename_from_path
 
@@ -61,7 +61,7 @@ def process_frame(source_face: Face, target_face: Face, temp_frame: Frame) -> Fr
 
     if roop.globals.many_faces:
         many_faces = get_all_faces(temp_frame)
-        if many_faces:
+        if many_faces is not None:
             for target_face in many_faces:
                 if target_face['det_score'] > 0.65:
                     temp_frame = swap_face(source_face, target_face, temp_frame)
@@ -80,7 +80,7 @@ def process_frame(source_face: Face, target_face: Face, temp_frame: Frame) -> Fr
             return temp_frame
                     
         target_face = get_first_face(temp_frame)
-        if target_face:
+        if target_face is not None:
             temp_frame = swap_face(source_face, target_face, temp_frame)
     return temp_frame
 

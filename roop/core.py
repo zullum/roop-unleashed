@@ -20,7 +20,7 @@ import roop.metadata
 import roop.utilities as util
 import roop.ui as ui
 from settings import Settings
-from roop.face_helper import extract_face_images
+from roop.face_util import extract_face_images
 from chain_img_processor import ChainImgProcessor, ChainVideoProcessor, ChainBatchImageProcessor
 
 clip_text = None
@@ -218,6 +218,20 @@ def live_swap(frame, swap_mode, use_clip, clip_text):
                                                         "clip_prompt": clip_text},
                                                         processors)
     return temp_frame
+    
+def preview_mask(frame, clip_text):
+    import numpy as np
+    
+    maskimage = np.zeros((frame.shape), np.uint8)
+    processors = "txt2clip"
+    
+    InitPlugins()
+
+    temp_frame, _ = roop.globals.IMAGE_CHAIN_PROCESSOR.run_chain(maskimage,  
+                                                    {"original_frame": frame, "clip_prompt": clip_text}, processors)
+    return temp_frame
+
+
 
 
 

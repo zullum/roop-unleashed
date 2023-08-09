@@ -26,6 +26,7 @@ selected_enhancer = None
 face_swap_mode = None
 blend_ratio = 0.5
 distance_threshold = 0.65
+default_det_size = True
 
 FACE_ENHANCER = None
 

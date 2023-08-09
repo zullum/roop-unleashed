@@ -1,5 +1,5 @@
 from chain_img_processor import ChainImgProcessor, ChainImgPlugin
-from roop.face_helper import get_one_face, get_many_faces, swap_face
+from roop.face_util import get_first_face, get_all_faces, swap_face
 import os
 from roop.utilities import compute_cosine_distance
 
@@ -41,7 +41,7 @@ class Faceswap(ChainImgPlugin):
         params["processed_faces"] = []
 
         if params["swap_mode"] == "first":
-            face = get_one_face(frame)
+            face = get_first_face(frame)
             if face is None:
                 params["face_detected"] = False
                 return frame
@@ -50,8 +50,8 @@ class Faceswap(ChainImgPlugin):
             return frame
 
         else:
-            faces = get_many_faces(frame)
-            if(len(faces) < 1):
+            faces = get_all_faces(frame)
+            if faces is None:
                 params["face_detected"] = False
                 return frame
             
