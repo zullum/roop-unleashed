@@ -309,7 +309,7 @@ def batch_process(files, use_clip, new_clip_text) -> None:
                 elif not roop.globals.skip_audio:
                     finalname = roop.utilities.get_destfilename_from_path(videofinalnames[index], roop.globals.output_path, f'_final.{roop.globals.CFG.output_video_format}')
                     util.restore_audio(videofinalnames[index], v, finalname)
-                    if os.path.isfile(videofinalnames[index]):
+                    if os.path.isfile(finalname):
                         os.remove(videofinalnames[index])
             else:
                 update_status('Failed!')
