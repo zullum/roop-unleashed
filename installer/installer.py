@@ -32,6 +32,7 @@ def install_dependencies():
     # Install Git and clone repo
     run_cmd("conda install -y -k git")
     run_cmd("git clone https://github.com/C0untFloyd/roop-unleashed.git")
+    run_cmd("git checkout 8e2e9aa71ca94b74a9d9048841d95d408ff7db3b")
 
     # Install the webui dependencies
     update_dependencies()

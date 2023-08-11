@@ -57,7 +57,7 @@ def prepare_environment():
 
 
 def run():
-    from roop.core import suggest_execution_providers
+    from roop.core import suggest_execution_providers, decode_execution_providers
     global input_faces, target_faces, face_selection, fake_cam_image, restart_server, live_cam_active, on_settings_changed
 
     prepare_environment()
@@ -78,6 +78,9 @@ def run():
     settings_controls = []
 
     live_cam_active = roop.globals.CFG.live_cam_start_active
+    roop.globals.execution_providers = decode_execution_providers([roop.globals.CFG.provider])
+    print(f'Using provider {roop.globals.execution_providers} - Device:{util.get_device()}')
+    
     run_server = True
     mycss = """
         span {color: var(--block-info-text-color)}        
@@ -147,6 +150,7 @@ def run():
                 with gr.Row(variant='panel'):
                     with gr.Column():
                         with gr.Accordion(label="Results", open=True):
+                            gr.Button("Open Output Folder", size='sm').click(fn=lambda: util.open_folder(util.resolve_relative_path('../output/')))
                             resultfiles = gr.Files(label='Processed File(s)', interactive=False)
                             resultimage = gr.Image(type='filepath', interactive=False)
                     with gr.Column():
@@ -171,12 +175,12 @@ def run():
             with gr.Tab("Extras"):
                 with gr.Row():
                     files_to_process = gr.Files(label='File(s) to process', file_count="multiple")
-                with gr.Row(variant='panel'):
-                    with gr.Accordion(label="Post process", open=False):
-                        with gr.Column():
-                            selected_post_enhancer = gr.Dropdown(["None", "Codeformer", "GFPGAN"], value="None", label="Select post-processing")
-                        with gr.Column():
-                            gr.Button("Start").click(fn=lambda: gr.Info('Not yet implemented...'))
+                # with gr.Row(variant='panel'):
+                #     with gr.Accordion(label="Post process", open=False):
+                #         with gr.Column():
+                #             selected_post_enhancer = gr.Dropdown(["None", "Codeformer", "GFPGAN"], value="None", label="Select post-processing")
+                #         with gr.Column():
+                #             gr.Button("Start").click(fn=lambda: gr.Info('Not yet implemented...'))
                 with gr.Row(variant='panel'):
                     with gr.Accordion(label="Video/GIF", open=False):
                         with gr.Row(variant='panel'):
@@ -254,7 +258,7 @@ def run():
             resultfiles.select(fn=on_resultfiles_selected, inputs=[resultfiles], outputs=[resultimage])
 
             face_selection.select(on_select_face, None, None)
-            bt_faceselect.click(fn=on_selected_face, outputs=[input_faces, target_faces])
+            bt_faceselect.click(fn=on_selected_face, outputs=[input_faces, target_faces, selected_face_detection])
             bt_cancelfaceselect.click(fn=on_end_face_selection, outputs=[dynamic_face_selection, face_selection])
             
             bt_clear_input_faces.click(fn=on_clear_input_faces, outputs=[input_faces])
@@ -471,11 +475,11 @@ def on_selected_face():
     if IS_INPUT:
         roop.globals.INPUT_FACES.append(fd[0])
         input_thumbs.append(image)
-        return input_thumbs, gr.Gallery.update(visible=True)
+        return input_thumbs, gr.Gallery.update(visible=True), gr.Dropdown.update(visible=True)
     else:
         roop.globals.TARGET_FACES.append(fd[0])
         target_thumbs.append(image)
-        return gr.Gallery.update(visible=True), target_thumbs
+        return gr.Gallery.update(visible=True), target_thumbs, gr.Dropdown.update(value='Selected face')
     
 #        bt_faceselect.click(fn=on_selected_face, outputs=[dynamic_face_selection, face_selection, input_faces, target_faces])
 
@@ -647,6 +651,9 @@ def on_stream_swap_cam(camimage, enhancer, blend_ratio):
 
 
 def on_cut_video(files, cut_start_frame, cut_end_frame):
+    if files is None:
+        return None
+    
     resultfiles = []
     for tf in files:
         f = tf.name
@@ -660,6 +667,9 @@ def on_cut_video(files, cut_start_frame, cut_end_frame):
     return resultfiles
 
 def on_join_videos(files):
+    if files is None:
+        return None
+    
     filenames = []
     for f in files:
         filenames.append(f.name)
@@ -676,6 +686,9 @@ def on_join_videos(files):
 
 
 def on_extract_frames(files):
+    if files is None:
+        return None
+    
     resultfiles = []
     for tf in files:
         f = tf.name
@@ -688,11 +701,13 @@ def on_extract_frames(files):
 
 
 def on_create_gif(files):
+    if files is None:
+        return None
+    
     for tf in files:
         f = tf.name
         gifname = util.get_destfilename_from_path(f, './output', '.gif')
         util.create_gif_from_video(f, gifname)
-    
     return gifname
 
 

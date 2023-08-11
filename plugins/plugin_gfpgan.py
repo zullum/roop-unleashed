@@ -57,20 +57,14 @@ class GFPGAN(ChainImgPlugin):
         if "processed_faces" in params:
             for face in params["processed_faces"]:
                 start_x, start_y, end_x, end_y = map(int, face['bbox'])
-                padding_x = int((end_x - start_x) * 0.5)
-                padding_y = int((end_y - start_y) * 0.5)
-                start_x = max(0, start_x - padding_x)
-                start_y = max(0, start_y - padding_y)
-                end_x = max(0, end_x + padding_x)
-                end_y = max(0, end_y + padding_y)
-                temp_face = temp_frame[start_y:end_y, start_x:end_x]
+                temp_face, start_x, start_y, end_x, end_y = self.cutout(temp_frame, start_x, start_y, end_x, end_y, 0.5)
                 if temp_face.size:
                     with THREAD_LOCK_GFPGAN:
                         _, _, temp_face = model_gfpgan.enhance(
                                 temp_face,
                                 paste_back=True
                             )
-                    temp_frame[start_y:end_y, start_x:end_x] = temp_face
+                    temp_frame = self.paste_into(temp_face, temp_frame, start_x, start_y, end_x, end_y, False)
         else:
             with THREAD_LOCK_GFPGAN:
                 _, _, temp_frame = model_gfpgan.enhance(

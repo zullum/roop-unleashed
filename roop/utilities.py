@@ -212,7 +212,7 @@ def open_with_default_app(filename):
     elif platform == 'wsl':
         subprocess.call('cmd.exe /C start'.split() + [filename])
     else:                                   # linux variants
-        subprocess.call(('xdg-open', filename))
+        subprocess.call('xdg-open', filename)
 
 def prepare_for_batch(target_files):
     print("Preparing temp files")
@@ -224,6 +224,26 @@ def prepare_for_batch(target_files):
         newname = os.path.basename(f.name)
         shutil.move(f.name, os.path.join(tempfolder, newname))
     return tempfolder
+
+
+def open_folder(path:str):
+    platform = get_platform()
+    try:
+        if platform == 'darwin':
+            subprocess.call(('open', path))
+        elif platform in ['win64', 'win32']:
+            open_with_default_app(path)
+        elif platform == 'wsl':
+            subprocess.call('cmd.exe /C start'.split() + [path])
+        else:                                   # linux variants
+            subprocess.call('xdg-open', path)
+    except Exception as e:
+        print(e)
+        pass
+        #import webbrowser
+        #webbrowser.open(url)
+
+
     
 
 # def open_url(url: str, wait: bool = False, locate: bool = False) -> int:

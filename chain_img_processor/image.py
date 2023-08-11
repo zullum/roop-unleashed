@@ -166,6 +166,26 @@ class ChainImgPlugin:
         pass
     def process(self, img, params:dict): # process img. Called multiple
         return img
+    
+    def cutout(self, frame, start_x, start_y, end_x, end_y, padding_factor):
+        padding_x = int((end_x - start_x) * padding_factor)
+        padding_y = int((end_y - start_y) * padding_factor)
+
+        start_x = max(0, start_x - padding_x)
+        start_y = max(0, start_y - padding_y)
+        end_x = min(frame.shape[1], end_x + padding_x)
+        end_y = min(frame.shape[0], end_y + padding_y)
+        return frame[start_y:end_y, start_x:end_x], start_x, start_y, end_x, end_y
+    
+    def paste_into(self, clip, frame, start_x, start_y, end_x, end_y, smooth):
+        if smooth:
+            frame[start_y:end_y, start_x:end_x] = clip
+        else:
+            frame[start_y:end_y, start_x:end_x] = clip
+        return frame
+
+    
+
 
 _img_processor:ChainImgProcessor = None
 def get_single_image_processor() -> ChainImgProcessor:
@@ -174,3 +194,4 @@ def get_single_image_processor() -> ChainImgProcessor:
         _img_processor = ChainImgProcessor()
         _img_processor.init_with_plugins()
     return _img_processor
+

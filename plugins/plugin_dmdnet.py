@@ -81,33 +81,72 @@ class DMDNETPlugin(ChainImgPlugin):
         if "processed_faces" in params:
             for face in params["processed_faces"]:
                 start_x, start_y, end_x, end_y = map(int, face['bbox'])
-                # padding_x = int((end_x - start_x) * 0.5)
-                # padding_y = int((end_y - start_y) * 0.5)
-                padding_x = 0
-                padding_y = 0
-
-                start_x = max(0, start_x - padding_x)
-                start_y = max(0, start_y - padding_y)
-                end_x = max(0, end_x + padding_x)
-                end_y = max(0, end_y + padding_y)
-                temp_face = temp_frame[start_y:end_y, start_x:end_x]
+                temp_face, start_x, start_y, end_x, end_y = self.cutout(temp_frame, start_x, start_y, end_x, end_y, 0.5)
                 if temp_face.size:
-                    temp_face = self.enhance_face(temp_face, face)
+                    temp_face = self.enhance_face(params["input_face_datas"][0], temp_face, face, start_x, start_y)
                     temp_face = cv2.resize(temp_face, (end_x - start_x,end_y - start_y), interpolation = cv2.INTER_LANCZOS4)
-                    temp_frame[start_y:end_y, start_x:end_x] = temp_face
+                    temp_frame = self.paste_into(temp_face, temp_frame, start_x, start_y, end_x, end_y, False)
+
+        if not "blend_ratio" in params: 
+            return temp_frame
 
         temp_frame = Image.blend(Image.fromarray(frame), Image.fromarray(temp_frame), params["blend_ratio"])
         return asarray(temp_frame)
 
+    def check_bbox(self, imgs, boxes):
+        boxes = boxes.view(-1, 4, 4)
+        colors = [(0, 255, 0), (0, 255, 0), (255, 255, 0), (255, 0, 0)]
+        i = 0
+        for img, box in zip(imgs, boxes):
+            img = (img + 1)/2 * 255
+            img2 = img.permute(1, 2, 0).float().cpu().flip(2).numpy().copy()
+            for idx, point in enumerate(box):
+                cv2.rectangle(img2, (int(point[0]), int(point[1])), (int(point[2]), int(point[3])), color=colors[idx], thickness=2)
+            cv2.imwrite('dmdnet_{:02d}.png'.format(i), img2)
+            i += 1
 
-    def enhance_face(self, clip, face):
+    # clip: cutout face: face struct
+    def enhance_face(self, ref_face, clip, face, x_offs, y_offs):
         global device
 
         lm106 = face.landmark_2d_106
         lq_landmarks = asarray(self.landmarks106_to_68(lm106))
-        lq = read_img_tensor(clip, False)
+
+        sub = np.full_like(lq_landmarks, [x_offs, y_offs])
+        lq_landmarks = lq_landmarks - sub
+
+        lq,lq_landmarks = read_img_tensor(clip, lq_landmarks)
 
         LQLocs = get_component_location(lq_landmarks)
+        #self.check_bbox(lq, LQLocs.unsqueeze(0))
+
+        # specific
+        # start_x, start_y, end_x, end_y = map(int, ref_face['bbox'])
+        # temp_face = temp_frame[start_y:end_y, start_x:end_x]
+        # if temp_face.size:
+        #     SpecificImgs = []
+        #     SpecificLocs = []
+        #     lm106 = ref_face.landmark_2d_106
+        #     ref_landmarks = asarray(self.landmarks106_to_68(lm106))
+        #     ref_tensor, ref_landmarks, _ = read_img_tensor(clip, ref_landmarks)
+        #     SpecificImgs.append(ref_tensor)
+        #     ref_locs = get_component_location(ref_landmarks)
+        #     SpecificLocs.append(ref_locs.unsqueeze(0))
+
+        #     SpecificImgs = torch.cat(SpecificImgs, dim=0)
+        #     SpecificLocs = torch.cat(SpecificLocs, dim=0)
+        #     # check_bbox(SpecificImgs, SpecificLocs)
+        #     SpMem256, SpMem128, SpMem64 = DMDNet.generate_specific_dictionary(sp_imgs = SpecificImgs.to(device), sp_locs = SpecificLocs)
+        #     SpMem256Para = {}
+        #     SpMem128Para = {}
+        #     SpMem64Para = {}
+        #     for k, v in SpMem256.items():
+        #         SpMem256Para[k] = v
+        #     for k, v in SpMem128.items():
+        #         SpMem128Para[k] = v
+        #     for k, v in SpMem64.items():
+        #         SpMem64Para[k] = v
+
         # generic
         SpMem256Para, SpMem128Para, SpMem64Para = None, None, None
 
@@ -150,22 +189,28 @@ def create(devicename):
 
 
 
-def read_img_tensor(Img=None, return_landmark=True): #rgb -1~1 
+def read_img_tensor(Img=None, landmarks=None): #rgb -1~1 
 #    Img = cv2.imread(img_path, cv2.IMREAD_UNCHANGED)  # BGR or G
     if Img.ndim == 2:
         Img = cv2.cvtColor(Img, cv2.COLOR_GRAY2RGB)  # GGG
     else:
         Img = cv2.cvtColor(Img, cv2.COLOR_BGR2RGB)  # RGB
     
-    if Img.shape[0] < 512 or Img.shape[1] < 512:
+    if Img.shape[0] != 512 or Img.shape[1] != 512:
+        y_factor = 512 / Img.shape[0]
+        x_factor = 512 / Img.shape[1]
+        mult = np.full_like(landmarks, [x_factor, y_factor])
+        landmarks = landmarks * mult
         Img = cv2.resize(Img, (512,512), interpolation = cv2.INTER_AREA)
+
+
     # ImgForLands = Img.copy()
 
     Img = Img.transpose((2, 0, 1))/255.0
     Img = torch.from_numpy(Img).float()
     normalize(Img, [0.5,0.5,0.5], [0.5,0.5,0.5], inplace=True)
     ImgTensor = Img.unsqueeze(0)
-    return ImgTensor
+    return ImgTensor, landmarks
 
 
 def get_component_location(Landmarks, re_read=False):

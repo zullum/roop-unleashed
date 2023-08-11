@@ -1,6 +1,6 @@
 @echo off
 REM Please set the following commandline arguments to your prefered settings
-set COMMANDLINE_ARGS=--execution-provider cuda --frame-processor face_swapper face_enhancer --video-encoder libvpx-vp9
+set COMMANDLINE_ARGS=
 
 cd /D "%~dp0"
 

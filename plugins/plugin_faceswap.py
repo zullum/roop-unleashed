@@ -68,8 +68,9 @@ class Faceswap(ChainImgPlugin):
                 for i,tf in enumerate(params["target_face_datas"]):
                     for face in faces:
                         if compute_cosine_distance(tf.embedding, face.embedding) <= dist_threshold:
-                            temp_frame = swap_face(params["input_face_datas"][i], face, temp_frame)
-                            params["processed_faces"].append(face)
+                            if(i < len(params["input_face_datas"])):
+                                temp_frame = swap_face(params["input_face_datas"][i], face, temp_frame)
+                                params["processed_faces"].append(face)
                             break
 
             elif params["swap_mode"] == "all_female" or params["swap_mode"] == "all_male":

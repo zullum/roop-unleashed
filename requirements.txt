@@ -1,7 +1,7 @@
 --extra-index-url https://download.pytorch.org/whl/cu118
 
 numpy==1.24.2
-gradio==3.38.0
+gradio>=3.38.0
 opencv-python==4.7.0.72
 onnx==1.14.0
 insightface==0.7.3
