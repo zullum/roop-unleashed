@@ -158,7 +158,7 @@ def run():
                             previewimage = gr.Image(label="Preview Image", interactive=False)
                             with gr.Row(variant='panel'):
                                 with gr.Column():
-                                    preview_frame_num = gr.Slider(0, 0, value=0, label="Frame Number", step=1.0)
+                                    preview_frame_num = gr.Slider(0, 0, value=0, label="Frame Number", step=1.0, interactive=True)
                                 with gr.Column():
                                     bt_use_face_from_preview = gr.Button("Use Face from this Frame", variant='primary')
                         
@@ -607,7 +607,16 @@ def on_destfiles_changed(destfiles):
     if destfiles is None:
         return None, gr.Slider.update(value=0, maximum=0)
     
-    return on_destfiles_selected(evt=None, target_files=destfiles)
+    filename = destfiles[selected_preview_index].name
+    if util.is_video(filename) or filename.lower().endswith('gif'):
+        current_frame = get_video_frame(filename, 0)
+        total_frames = get_video_frame_total(filename)
+    else:
+        current_frame = get_image_frame(filename)
+        total_frames = 0
+    
+    current_frame = convert_to_gradio(current_frame)
+    return current_frame, gr.Slider.update(value=0, maximum=total_frames)
 
 
 
