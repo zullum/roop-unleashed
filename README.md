@@ -62,7 +62,10 @@ For Video face-swapping you also need to have ffmpeg properly installed (having 
 
 - Windows: run the `windows_run.bat` from the Installer.
 - Linux: `python run.py`
-- Colab included right here https://github.com/C0untFloyd/roop-unleashed/blob/main/roop-unleashed.ipynb
+
+<a target="_blank" href="https://colab.research.google.com/github/C0untFloyd/roop-unleashed/blob/main/roop-unleashed.ipynb">
+  <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/>
+</a>
   
 
 Additional commandline arguments are currently unsupported and settings should be done via the UI.
