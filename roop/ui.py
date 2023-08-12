@@ -491,6 +491,9 @@ def on_end_face_selection():
 def on_preview_frame_changed(frame_num, files, fake_preview, enhancer, detection, face_distance, blend_ratio, target_files, use_clip, clip_text):
     from roop.core import live_swap
 
+    if files is None or selected_preview_index >= len(files):
+        return None
+
     filename = files[selected_preview_index].name
     if util.is_video(filename) or filename.lower().endswith('gif'):
         current_frame = get_video_frame(filename, frame_num)
@@ -604,9 +607,10 @@ def start_swap(enhancer, detection, keep_fps, keep_frames, skip_audio, face_dist
 def on_destfiles_changed(destfiles):
     global selected_preview_index
 
-    if destfiles is None:
+    if destfiles is None or len(destfiles) < 1:
         return None, gr.Slider.update(value=0, maximum=0)
     
+    selected_preview_index = 0
     filename = destfiles[selected_preview_index].name
     if util.is_video(filename) or filename.lower().endswith('gif'):
         current_frame = get_video_frame(filename, 0)
