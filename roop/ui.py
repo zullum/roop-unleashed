@@ -253,6 +253,7 @@ def run():
             target_faces.select(on_select_target_face, None, None)
             bt_remove_selected_target_face.click(fn=remove_selected_target_face, outputs=[target_faces])
 
+            bt_destfiles.change(fn=on_destfiles_changed, inputs=[bt_destfiles], outputs=[previewimage, preview_frame_num])
             bt_destfiles.select(fn=on_destfiles_selected, inputs=[bt_destfiles], outputs=[previewimage, preview_frame_num])
             bt_destfiles.clear(fn=on_clear_destfiles, outputs=[target_faces])
             resultfiles.select(fn=on_resultfiles_selected, inputs=[resultfiles], outputs=[resultimage])
@@ -277,7 +278,7 @@ def run():
             bt_refresh_preview.click(fn=on_preview_frame_changed, inputs=previewinputs, outputs=[previewimage])            
             fake_preview.change(fn=on_preview_frame_changed, inputs=previewinputs, outputs=[previewimage])
             preview_frame_num.change(fn=on_preview_frame_changed, inputs=previewinputs, outputs=[previewimage], show_progress='hidden')
-            bt_use_face_from_preview.click(fn=on_use_face_from_selected, show_progress='full', inputs=[bt_destfiles, preview_frame_num], outputs=[dynamic_face_selection, face_selection, target_faces])
+            bt_use_face_from_preview.click(fn=on_use_face_from_selected, show_progress='full', inputs=[bt_destfiles, preview_frame_num], outputs=[dynamic_face_selection, face_selection, target_faces, selected_face_detection])
 
             
             # Live Cam
@@ -456,9 +457,9 @@ def on_use_face_from_selected(files, frame_num):
     if len(thumbs) == 1:
         roop.globals.TARGET_FACES.append(SELECTION_FACES_DATA[0][0])
         target_thumbs.append(thumbs[0])
-        return gr.Row.update(visible=False), None, target_thumbs
+        return gr.Row.update(visible=False), None, target_thumbs, gr.Dropdown.update(value='Selected face')
 
-    return gr.Row.update(visible=True), thumbs, gr.Gallery.update(visible=True)
+    return gr.Row.update(visible=True), thumbs, gr.Gallery.update(visible=True), gr.Dropdown.update(visible=True)
 
 
 
@@ -600,11 +601,21 @@ def start_swap(enhancer, detection, keep_fps, keep_frames, skip_audio, face_dist
     return None, None
 
    
+def on_destfiles_changed(destfiles):
+    global selected_preview_index
+
+    if destfiles is None:
+        return None, gr.Slider.update(value=0, maximum=0)
     
+    return on_destfiles_selected(evt=None, target_files=destfiles)
+
+
+
 def on_destfiles_selected(evt: gr.SelectData, target_files):
     global selected_preview_index
 
-    selected_preview_index = evt.index
+    if evt is not None:
+        selected_preview_index = evt.index
     filename = target_files[selected_preview_index].name
     if util.is_video(filename) or filename.lower().endswith('gif'):
         current_frame = get_video_frame(filename, 0)

@@ -6,6 +6,7 @@ import roop.globals
 from roop.typing import Frame, Face
 
 import cv2
+import numpy as np
 from roop.capturer import get_video_frame
 from roop.utilities import resolve_relative_path, conditional_download
 
@@ -91,3 +92,13 @@ def pre_check() -> bool:
 
 def swap_face(source_face: Face, target_face: Face, temp_frame: Frame) -> Frame:
     return get_face_swapper().get(temp_frame, target_face, source_face, paste_back=True)
+
+def face_offset_top(face: Face, offset):
+    smallestmin = np.min(face.landmark_2d_106, 1)
+    smallest = smallestmin[1]
+    face['bbox'][1] += offset
+    face['bbox'][3] += offset
+    lm106 = face.landmark_2d_106
+    add = np.full_like(lm106, [0, offset])
+    face['landmark_2d_106'] = lm106 + add
+    return face
