@@ -167,6 +167,10 @@ class ChainImgPlugin:
     def process(self, img, params:dict): # process img. Called multiple
         return img
     
+    def unload(self):
+        pass
+
+
     def cutout(self, frame, start_x, start_y, end_x, end_y, padding_factor):
         padding_x = int((end_x - start_x) * padding_factor)
         padding_y = int((end_y - start_y) * padding_factor)

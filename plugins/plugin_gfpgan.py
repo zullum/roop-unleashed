@@ -40,7 +40,6 @@ class GFPGAN(ChainImgPlugin):
             model_gfpgan = gfpgan.GFPGANer(model_path=model_path, upscale=1, device=self.device) # type: ignore[attr-defined]
 
 
-
     def process(self, frame, params:dict):
         import copy
 

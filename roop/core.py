@@ -14,6 +14,7 @@ import signal
 import argparse
 import torch
 import onnxruntime
+import tensorflow
 
 import roop.globals
 import roop.metadata
@@ -109,11 +110,11 @@ def suggest_execution_threads() -> int:
 
 def limit_resources() -> None:
     # prevent tensorflow memory leak
-    # gpus = tensorflow.config.experimental.list_physical_devices('GPU')
-    # for gpu in gpus:
-        # tensorflow.config.experimental.set_virtual_device_configuration(gpu, [
-            # tensorflow.config.experimental.VirtualDeviceConfiguration(memory_limit=1024)
-        # ])
+    gpus = tensorflow.config.experimental.list_physical_devices('GPU')
+    for gpu in gpus:
+        tensorflow.config.experimental.set_virtual_device_configuration(gpu, [
+            tensorflow.config.experimental.VirtualDeviceConfiguration(memory_limit=1024)
+        ])
     # limit memory usage
     if roop.globals.max_memory:
         memory = roop.globals.max_memory * 1024 ** 3
@@ -121,16 +122,22 @@ def limit_resources() -> None:
             memory = roop.globals.max_memory * 1024 ** 6
         if platform.system().lower() == 'windows':
             import ctypes
-            kernel32 = ctypes.windll.kernel32
+            kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
             kernel32.SetProcessWorkingSetSize(-1, ctypes.c_size_t(memory), ctypes.c_size_t(memory))
         else:
             import resource
             resource.setrlimit(resource.RLIMIT_DATA, (memory, memory))
 
 
+
 def release_resources() -> None:
-    if 'CUDAExecutionProvider' in roop.globals.execution_providers:
-        torch.cuda.empty_cache()
+    import gc
+
+    gc.collect()
+    if 'CUDAExecutionProvider' in roop.globals.execution_providers and torch.cuda.is_available():
+        with torch.cuda.device('cuda'):
+            torch.cuda.empty_cache()
+            torch.cuda.ipc_collect()
 
 
 def pre_check() -> bool:
@@ -248,6 +255,8 @@ def batch_process(files, use_clip, new_clip_text) -> None:
 
     InitPlugins()
     processors = get_processing_plugins(use_clip)
+    release_resources()
+    limit_resources()
 
     clip_text = new_clip_text
 
@@ -313,15 +322,16 @@ def batch_process(files, use_clip, new_clip_text) -> None:
                         os.remove(videofinalnames[index])
             else:
                 update_status('Failed!')
+            release_resources()
 
-            
     update_status('Finished')
     roop.globals.target_folder_path = None
-
+    release_resources()
 
 def destroy() -> None:
     if roop.globals.target_path:
         util.clean_temp(roop.globals.target_path)
+    release_resources()        
     sys.exit()
 
 
@@ -329,7 +339,6 @@ def run() -> None:
     parse_args()
     if not pre_check():
         return
-    limit_resources()
     roop.globals.CFG = Settings('config.yaml')
     if roop.globals.headless:
         start()

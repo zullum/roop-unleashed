@@ -67,7 +67,7 @@ def join_videos(videos: List[str], dest_filename: str):
 def extract_frames(target_path: str) -> None:
     create_temp(target_path)
     temp_directory_path = get_temp_directory_path(target_path)
-    run_ffmpeg(['-i', target_path, '-pix_fmt', 'rgb24', os.path.join(temp_directory_path, f'%04d.{roop.globals.CFG.output_image_format}')])
+    run_ffmpeg(['-i', target_path, '-q:v', '1', '-pix_fmt', 'rgb24', os.path.join(temp_directory_path, f'%04d.{roop.globals.CFG.output_image_format}')])
     return temp_directory_path
 
 

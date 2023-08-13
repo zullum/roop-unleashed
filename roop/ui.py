@@ -231,19 +231,20 @@ def run():
                         input_server_port = gr.Number(label="Server Port", precision=0, info="Leave at 0 to use default", value=roop.globals.CFG.server_port)
                 with gr.Row():
                     with gr.Column():
-                        max_threads = gr.Slider(1, 64, value=roop.globals.CFG.max_threads, label="Max. Number of Threads", info='default: 8', step=1.0, interactive=True)
-                        settings_controls.append(gr.Dropdown(image_formats, label="Image Output Format", info='default: png', value=roop.globals.CFG.output_image_format, elem_id='output_image_format', interactive=True))
-                        button_clean_temp = gr.Button("Clean temp folder")
-                    with gr.Column():
                         settings_controls.append(gr.Dropdown(providerlist, label="Provider", value=roop.globals.CFG.provider, elem_id='provider', interactive=True))
-                        settings_controls.append(gr.Dropdown(video_formats, label="Video Output Format", info='default: mp4', value=roop.globals.CFG.output_video_format, elem_id='output_video_format', interactive=True))
-                        button_apply_settings = gr.Button("Apply Settings")
+                        max_threads = gr.Slider(1, 64, value=roop.globals.CFG.max_threads, label="Max. Number of Threads", info='default: 8', step=1.0, interactive=True)
+                        memory_limit = gr.Slider(0, 128, value=roop.globals.CFG.memory_limit, label="Max. Memory to use (Gb)", info='0 meaning no limit', step=1.0, interactive=True)
+                    with gr.Column():
+                        settings_controls.append(gr.Dropdown(image_formats, label="Image Output Format", info='default: png', value=roop.globals.CFG.output_image_format, elem_id='output_image_format', interactive=True))
                     with gr.Column():
                         settings_controls.append(gr.Dropdown(video_codecs, label="Video Codec", info='default: libx264', value=roop.globals.CFG.output_video_codec, elem_id='output_video_codec', interactive=True))
+                        settings_controls.append(gr.Dropdown(video_formats, label="Video Output Format", info='default: mp4', value=roop.globals.CFG.output_video_format, elem_id='output_video_format', interactive=True))
                         video_quality = gr.Slider(0, 100, value=roop.globals.CFG.video_quality, label="Video Quality (crf)", info='default: 14', step=1.0, interactive=True)
                     with gr.Column():
                         button_apply_restart = gr.Button("Restart Server", variant='primary')
                         settings_controls.append(gr.Checkbox(label='Start with active live cam', value=roop.globals.CFG.live_cam_start_active, elem_id='live_cam_start_active', interactive=True))
+                        button_clean_temp = gr.Button("Clean temp folder")
+                        button_apply_settings = gr.Button("Apply Settings")
 
             input_faces.select(on_select_input_face, None, None)
             bt_remove_selected_input_face.click(fn=remove_selected_input_face, outputs=[input_faces])
@@ -296,6 +297,7 @@ def run():
             for s in settings_controls:
                 s.select(fn=on_settings_changed)
             max_threads.input(fn=lambda a,b='max_threads':on_settings_changed_misc(a,b), inputs=[max_threads])
+            memory_limit.input(fn=lambda a,b='max_threads':on_settings_changed_misc(a,b), inputs=[memory_limit])
             video_quality.input(fn=lambda a,b='video_quality':on_settings_changed_misc(a,b), inputs=[video_quality])
 
             button_clean_temp.click(fn=clean_temp, outputs=[bt_srcimg, input_faces, target_faces, bt_destfiles])
@@ -595,6 +597,8 @@ def start_swap(enhancer, detection, keep_fps, keep_frames, skip_audio, face_dist
     roop.globals.execution_threads = roop.globals.CFG.max_threads
     roop.globals.video_encoder = roop.globals.CFG.output_video_codec
     roop.globals.video_quality = roop.globals.CFG.video_quality
+    roop.globals.max_memory = roop.globals.CFG.memory_limit if roop.globals.CFG.memory_limit > 0 else None
+         
 
     batch_process([file.name for file in target_files], use_clip, clip_text)
     outdir = pathlib.Path(roop.globals.output_path)
