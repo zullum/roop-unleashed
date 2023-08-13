@@ -24,16 +24,14 @@ What OS are you using?
 - [ ] Windows 
 - [ ] Mac
 
-Are you try to use a GPU?
-- [ ] No. I am not using the `---gpu` flag
+Are you using a GPU?
+- [ ] No. CPU FTW
 - [ ] NVIDIA
 - [ ] AMD
 - [ ] Intel
 - [ ] Mac
 
+**Which version of roop unleashed are you using?**
+
 **Screenshots**
 If applicable, add screenshots to help explain your problem.
-
-**Sanity Check**
-- [ ] I have the latest code from the github repository
-- [ ] I have followed the installation guide
