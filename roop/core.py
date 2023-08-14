@@ -208,7 +208,7 @@ def get_processing_plugins(use_clip):
     return processors
 
 
-def live_swap(frame, swap_mode, use_clip, clip_text):
+def live_swap(frame, swap_mode, use_clip, clip_text, selected_index = 0):
     if frame is None:
         return frame
 
@@ -220,6 +220,7 @@ def live_swap(frame, swap_mode, use_clip, clip_text):
                                                     {"swap_mode": swap_mode,
                                                         "original_frame": frame,
                                                         "blend_ratio": roop.globals.blend_ratio,
+                                                        "selected_index": selected_index,
                                                         "face_distance_threshold": roop.globals.distance_threshold,
                                                         "input_face_datas": roop.globals.INPUT_FACES, "target_face_datas": roop.globals.TARGET_FACES,
                                                         "clip_prompt": clip_text},

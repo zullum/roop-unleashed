@@ -46,7 +46,12 @@ class Faceswap(ChainImgPlugin):
                 params["face_detected"] = False
                 return frame
             params["processed_faces"].append(face)
-            frame = swap_face(params["input_face_datas"][0], face, frame) 
+            face_index = 0
+            if "selected_index" in params:
+                face_index = params["selected_index"]
+            if face_index >= len(params["input_face_datas"]):
+                face_index = 0
+            frame = swap_face(params["input_face_datas"][face_index], face, frame) 
             return frame
 
         else:

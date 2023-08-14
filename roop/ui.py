@@ -276,7 +276,7 @@ def run():
                 outputs=[resultfiles, resultimage])
             
             previewinputs = [preview_frame_num, bt_destfiles, fake_preview, selected_enhancer, selected_face_detection,
-                                max_face_distance, blend_ratio, bt_destfiles, chk_useclip, clip_text] 
+                                max_face_distance, blend_ratio, chk_useclip, clip_text] 
             bt_refresh_preview.click(fn=on_preview_frame_changed, inputs=previewinputs, outputs=[previewimage])            
             fake_preview.change(fn=on_preview_frame_changed, inputs=previewinputs, outputs=[previewimage])
             preview_frame_num.change(fn=on_preview_frame_changed, inputs=previewinputs, outputs=[previewimage], show_progress='hidden')
@@ -491,7 +491,9 @@ def on_end_face_selection():
     return gr.Column.update(visible=False), None
 
 
-def on_preview_frame_changed(frame_num, files, fake_preview, enhancer, detection, face_distance, blend_ratio, target_files, use_clip, clip_text):
+def on_preview_frame_changed(frame_num, files, fake_preview, enhancer, detection, face_distance, blend_ratio, use_clip, clip_text):
+    global SELECTED_INPUT_FACE_INDEX
+
     from roop.core import live_swap
 
     if files is None or selected_preview_index >= len(files):
@@ -517,7 +519,7 @@ def on_preview_frame_changed(frame_num, files, fake_preview, enhancer, detection
         use_clip = False
 
     roop.globals.execution_threads = roop.globals.CFG.max_threads
-    current_frame = live_swap(current_frame, roop.globals.face_swap_mode, use_clip, clip_text)
+    current_frame = live_swap(current_frame, roop.globals.face_swap_mode, use_clip, clip_text, SELECTED_INPUT_FACE_INDEX)
     if current_frame is None:
         return None 
     return convert_to_gradio(current_frame)
@@ -667,14 +669,14 @@ def on_cam_toggle(state):
 
 def on_stream_swap_cam(camimage, enhancer, blend_ratio):
     from roop.core import live_swap
-    global current_cam_image, cam_counter, cam_swapping, fake_cam_image
+    global current_cam_image, cam_counter, cam_swapping, fake_cam_image, SELECTED_INPUT_FACE_INDEX
 
     roop.globals.selected_enhancer = enhancer
     roop.globals.blend_ratio = blend_ratio
 
     if not cam_swapping and len(roop.globals.INPUT_FACES) > 0:
         cam_swapping = True
-        current_cam_image = live_swap(camimage, "all", False, None)
+        current_cam_image = live_swap(camimage, "all", False, None, SELECTED_INPUT_FACE_INDEX)
         cam_swapping = False
     return current_cam_image
 
