@@ -47,8 +47,8 @@ class Text2Clip(ChainImgPlugin):
             model_clip = CLIPDensePredT(version='ViT-B/16', reduce_dim=64, complex_trans_conv=True)
             model_clip.eval();
             model_clip.load_state_dict(torch.load('models/CLIP/rd64-uni-refined.pth', map_location=torch.device('cpu')), strict=False)
-        else: 
-            model_clip.to(device)    
+
+        model_clip.to(device)    
 
 
     def init_plugin(self):
