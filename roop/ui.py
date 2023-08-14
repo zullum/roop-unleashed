@@ -68,12 +68,6 @@ def run():
     video_codecs = ['libx264', 'libx265', 'libvpx-vp9', 'h264_nvenc', 'hevc_nvenc']
     providerlist = suggest_execution_providers()
     
-    server_name = roop.globals.CFG.server_name
-    if server_name is None or len(server_name) < 1:
-        server_name = None
-    server_port = roop.globals.CFG.server_port
-    if server_port <= 0:
-        server_port = None
         
     settings_controls = []
 
@@ -87,6 +81,13 @@ def run():
 """
 
     while run_server:
+        server_name = roop.globals.CFG.server_name
+        if server_name is None or len(server_name) < 1:
+            server_name = None
+        server_port = roop.globals.CFG.server_port
+        if server_port <= 0:
+            server_port = None
+        ssl_verify = False if server_name == '0.0.0.0' else True
         with gr.Blocks(title=f'{roop.metadata.name} {roop.metadata.version}', theme=roop.globals.CFG.selected_theme, css=mycss) as ui:
             with gr.Row(variant='panel'):
                     gr.Markdown(f"### [{roop.metadata.name} {roop.metadata.version}](https://github.com/C0untFloyd/roop-unleashed)")
@@ -191,9 +192,9 @@ def run():
                                             Encoding uses your configuration from the Settings Tab.
     """)
                             with gr.Column():
-                                cut_start_time = gr.Slider(0, 100000, value=0, label="Start Frame", step=1.0, interactive=True)
+                                cut_start_time = gr.Slider(0, 1000000, value=0, label="Start Frame", step=1.0, interactive=True)
                             with gr.Column():
-                                cut_end_time = gr.Slider(1, 100000, value=1, label="End Frame", step=1.0, interactive=True)
+                                cut_end_time = gr.Slider(1, 1000000, value=1, label="End Frame", step=1.0, interactive=True)
                             with gr.Column():
                                 start_cut_video = gr.Button("Start")
 
@@ -297,7 +298,7 @@ def run():
             for s in settings_controls:
                 s.select(fn=on_settings_changed)
             max_threads.input(fn=lambda a,b='max_threads':on_settings_changed_misc(a,b), inputs=[max_threads])
-            memory_limit.input(fn=lambda a,b='max_threads':on_settings_changed_misc(a,b), inputs=[memory_limit])
+            memory_limit.input(fn=lambda a,b='memory_limit':on_settings_changed_misc(a,b), inputs=[memory_limit])
             video_quality.input(fn=lambda a,b='video_quality':on_settings_changed_misc(a,b), inputs=[video_quality])
 
             button_clean_temp.click(fn=clean_temp, outputs=[bt_srcimg, input_faces, target_faces, bt_destfiles])
@@ -308,7 +309,7 @@ def run():
 
         restart_server = False
         try:
-            ui.queue().launch(inbrowser=True, server_name=server_name, server_port=server_port, share=roop.globals.CFG.server_share, prevent_thread_lock=True, show_error=True)
+            ui.queue().launch(inbrowser=True, server_name=server_name, server_port=server_port, share=roop.globals.CFG.server_share, ssl_verify=ssl_verify, prevent_thread_lock=True, show_error=True)
         except:
             restart_server = True
             run_server = False
