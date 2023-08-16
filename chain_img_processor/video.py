@@ -1,132 +1,201 @@
+from typing import Any, List, Callable
+from roop.typing import Frame
+import psutil
+import os
+from concurrent.futures import ThreadPoolExecutor, as_completed, wait, FIRST_COMPLETED
+from threading import Thread
+from time import sleep, time
+from queue import Queue
+from .image import ChainImgProcessor
+from tqdm import tqdm
+import cv2
+from chain_img_processor.ffmpeg_writer import FFMPEG_VideoWriter # ffmpeg install needed
 import roop.globals
 
-from threading import Thread
-from chain_img_processor import ChainImgProcessor
 
-class ThreadWithReturnValue(Thread):
+class ChainVideoImageProcessor(ChainImgProcessor):
+    chain = None
+    func_params_gen = None
+    num_threads = 1
+    current_index = 0
+    processing_frames = 1
+    reading_frames = False
+    buffer_wait_time = 0.1
+    loadbuffersize = 0 
 
-    def __init__(self, group=None, target=None, name=None,
-                 args=(), kwargs={}, Verbose=None):
-        Thread.__init__(self, group, target, name, args, kwargs)
-        self._return = None
+    savedict =	{}
 
-    def run(self):
-        if self._target is not None:
-            self._return = self._target(*self._args,
-                                        **self._kwargs)
+    framequeues = []
 
-    def join(self, *args):
-        Thread.join(self, *args)
-        return self._return
-
-
-# in beta
-class ChainVideoProcessor(ChainImgProcessor):
     def __init__(self):
         ChainImgProcessor.__init__(self)
 
-        self.video_save_codec = "libx264"
-        self.video_save_crf = 14
+    def pick_from_queue(self) -> List[str]:
+        entry = None
+        while self.queue.empty():
+            if self.reading_frames:
+                sleep(self.buffer_wait_time)
+            else:
+                return None
+
+        entry = (self.current_index, self.queue.get())
+        self.current_index += 1
+        return entry
+
 
     def init_with_plugins(self):
-        self.init_plugins(["core","core_video"])
+        self.init_plugins(["core"])
         self.display_init_info()
 
         init_on_start_arr = self.init_on_start.split(",")
         for proc_id in init_on_start_arr:
             self.init_processor(proc_id)
 
-    def run_video_chain(self, source_video, target_video, fps, threads:int = 1, chain = None, params_frame_gen_func = None, video_audio = None):
-        import cv2
-        from tqdm import tqdm
-        from chain_img_processor.ffmpeg_writer import FFMPEG_VideoWriter # ffmpeg install needed
+    def update_progress(self, progress: Any = None) -> None:
+        process = psutil.Process(os.getpid())
+        memory_usage = process.memory_info().rss / 1024 / 1024 / 1024
+        progress.set_postfix({
+            'memory_usage': '{:.2f}'.format(memory_usage).zfill(5) + 'GB',
+            'execution_threads': self.num_threads
+        })
+        progress.update(1)
+        progress.refresh()
 
-        cap = cv2.VideoCapture(source_video)
-        # width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        # height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
-        # first frame do manually - because upscale may happen, we need to estimate width/height
-        ret, frame = cap.read()
-        if params_frame_gen_func is not None:
-            params = params_frame_gen_func(self, frame)
-        else:
-            params = {}
-        params["original_frame"] = frame
-        frame_processed, params = self.run_chain(frame,params,chain)
-        height, width, channels = frame_processed.shape
+    def read_frames_thread(self, cap, num_threads):
+        self.reading_frames = True
+        i = 0
+        num_frame = 0
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                break
 
-        self.fill_processors_for_thread_chains(threads,chain)
-        #print(self.processors_objects)
-        #import threading
-        #locks:list[threading.Lock] = []
-        locks: list[bool] = []
-        for i in range(threads):
-            #locks.append(threading.Lock())
-            locks.append(False)
+            count = 0
+            while(self.framequeues[i].qsize() > self.loadbuffersize):
+                i += 1
+                count += 1
+                i %= num_threads
+                if count == num_threads:
+                    sleep(0.1)
 
-        temp = []
-        with FFMPEG_VideoWriter(target_video, (width, height), fps, codec=roop.globals.video_encoder, crf=roop.globals.video_quality, audiofile=video_audio) as output_video_ff:
-            with tqdm(total=frame_count, desc='Processing', unit="frame", dynamic_ncols=True,
-                      bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}{postfix}]') as progress:
+            self.framequeues[i].put((num_frame,frame))
+            num_frame += 1
+            i += 1
+            i %= num_threads
+        self.reading_frames = False
 
-                # do first frame
-                output_video_ff.write_frame(frame_processed)
-                progress.update(1) #
-                cnt_frames = 0
 
-                # do rest frames
-                while True:
-                    # getting frame
-                    ret, frame = cap.read()
 
-                    if not ret:
-                        break
-                    cnt_frames+=1
-                    thread_ind = cnt_frames % threads
-                    # we are having an array of length %gpu_threads%, running in parallel
-                    # so if array is equal or longer than gpu threads, waiting
-                    #while len(temp) >= threads:
-                    while locks[thread_ind]:
-                        #print('WAIT', thread_ind)
-                        # we are order dependent, so we are forced to wait for first element to finish. When finished removing thread from the list
-                        frame_processed, params = temp.pop(0).join()
-                        locks[params["_thread_index"]] = False
-                        #print('OFF',cnt_frames,locks[params["_thread_index"]],locks)
-                        # writing into output
-                        output_video_ff.write_frame(frame_processed)
-                        # updating the status
-                        progress.update(1)
 
-                    # calc params for frame
-                    if params_frame_gen_func is not None:
-                        params = params_frame_gen_func(self,frame)
+    def write_frames_thread(self, target_video, width, height, fps, total):
+        i = 0
+        with FFMPEG_VideoWriter(target_video, (width, height), fps, codec=roop.globals.video_encoder, crf=roop.globals.video_quality, audiofile=None) as output_video_ff:
+            while i < total:
+                if i in self.savedict:
+                    frame = self.savedict.pop(i)
+                    if frame is not None:
+                        output_video_ff.write_frame(frame)
+                    # del frame
+                    i += 1
+                    sleep(0.1)
+                else:
+                    if self.processing_frames > 0:
+                        sleep(0.5)
                     else:
-                        params = {}
+                        if(len(self.savedict) < 1):
+                            print(f'Write Videoframe {i}: No more frames!')
+                            break
 
-                    # adding new frame to the list and starting it
-                    locks[thread_ind] = True
-                    #print('ON', cnt_frames, thread_ind, locks)
-                    params["original_frame"] = frame
-                    temp.append(
-                        ThreadWithReturnValue(target=self.run_chain, args=(frame, params, chain, thread_ind)))
-                    temp[-1].start()
+           
 
-                while len(temp) > 0:
-                    # we are order dependent, so we are forced to wait for first element to finish. When finished removing thread from the list
-                    frame_processed, params = temp.pop(0).join()
-                    locks[params["_thread_index"]] = False
-                    # writing into output
-                    output_video_ff.write_frame(frame_processed)
 
-                    progress.update(1)
+    def process_frames(self, threadindex, progress) -> None:
+        copy_queue = Queue()
+        while True:
+            while self.framequeues[threadindex].empty():
+                if self.reading_frames:
+                    sleep(0.1)
+                else:
+                    self.processing_frames -= 1
+                    return
+            i = 0
+            while i < self.loadbuffersize and not self.framequeues[threadindex].empty():
+                copy_queue.put(self.framequeues[threadindex].get())
+                i += 1
 
-                #print("FINAL", locks)
+            while not copy_queue.empty(): 
+                frametuple = copy_queue.get()
+                if frametuple is None:
+                    return
+                index,frame = frametuple
+                if self.func_params_gen:
+                    params = self.func_params_gen(None, frame)
+                else:
+                    params = {}
+                resimg, _ = self.run_chain(frame, params, self.chain)
+                # print(f'Hello from {threadindex} -> {str(self.framequeues[threadindex].qsize())} - Reading: {self.reading_frames}')
+                self.savedict[index] = resimg
+                progress()
 
-_video_processor:ChainVideoProcessor = None
-def get_single_video_processor() -> ChainVideoProcessor:
-    global _video_processor
-    if _video_processor is None:
-        _video_processor = ChainVideoProcessor()
-        _video_processor.init_with_plugins()
-    return _video_processor
+
+
+    def run_batch_chain(self, source_video, target_video, fps, threads:int = 1, buffersize=32, chain = None, params_frame_gen_func = None):
+        cap = cv2.VideoCapture(source_video)
+        frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
+        self.chain = chain
+        self.func_params_gen = params_frame_gen_func
+        progress_bar_format = '{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}{postfix}]'
+        total = frame_count
+        self.num_threads = threads
+        self.queue = Queue()
+        self.current_index = 0
+
+        start_processing = time()
+
+        for _ in range(threads):
+            self.framequeues.append(Queue())
+        self.loadbuffersize = buffersize
+        self.processing_frames = self.num_threads
+
+        readthread = Thread(target=self.read_frames_thread, args=(cap, threads))
+        readthread.start()
+
+        # preload buffer
+        preload_size = min(frame_count, self.loadbuffersize * self.num_threads)
+        while True:
+            size = 0
+            for i in range(self.num_threads):
+                if not self.framequeues[i].empty():
+                    size += self.framequeues[i].qsize()
+            if size < preload_size:
+                sleep(0.1)
+            else:
+                break
+
+
+        writethread = Thread(target=self.write_frames_thread, args=(target_video, width, height, fps, total))
+        writethread.start()
+
+
+        with tqdm(total=total, desc='Processing', unit='frame', dynamic_ncols=True, bar_format=progress_bar_format) as progress:
+            with ThreadPoolExecutor(thread_name_prefix='swap_proc', max_workers=self.num_threads) as executor:
+                futures = []
+                
+                for threadindex in range(threads):
+                    future = executor.submit(self.process_frames, threadindex, lambda: self.update_progress(progress))
+                    futures.append(future)
+                
+                for future in as_completed(futures):
+                    future.result()
+        # wait for the task to complete
+        readthread.join()
+        writethread.join()
+
+        print(f'\nProcessing took {time() - start_processing} secs')
+        self.savedict.clear()
+
+

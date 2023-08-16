@@ -21,7 +21,11 @@ def get_face_analyser() -> Any:
 
     with THREAD_LOCK_ANALYSER:
         if FACE_ANALYSER is None:
-            FACE_ANALYSER = insightface.app.FaceAnalysis(name='buffalo_l', providers=roop.globals.execution_providers)
+            if roop.globals.CFG.force_cpu:
+                print('Forcing CPU for Face Analysis')
+                FACE_ANALYSER = insightface.app.FaceAnalysis(name='buffalo_l', providers=['CPUExecutionProvider'])
+            else:
+                FACE_ANALYSER = insightface.app.FaceAnalysis(name='buffalo_l', providers=roop.globals.execution_providers)
             FACE_ANALYSER.prepare(ctx_id=0, det_size=(640, 640) if roop.globals.default_det_size else (320,320))
     return FACE_ANALYSER
 

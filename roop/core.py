@@ -22,7 +22,7 @@ import roop.utilities as util
 import roop.ui as ui
 from settings import Settings
 from roop.face_util import extract_face_images
-from chain_img_processor import ChainImgProcessor, ChainVideoProcessor, ChainBatchImageProcessor
+from chain_img_processor import ChainImgProcessor, ChainVideoProcessor, ChainBatchImageProcessor, ChainVideoImageProcessor
 
 clip_text = None
 
@@ -187,7 +187,8 @@ def InitPlugins():
     if not roop.globals.IMAGE_CHAIN_PROCESSOR:
         roop.globals.IMAGE_CHAIN_PROCESSOR = ChainImgProcessor()
         roop.globals.BATCH_IMAGE_CHAIN_PROCESSOR = ChainBatchImageProcessor()
-        roop.globals.VIDEO_CHAIN_PROCESSOR = ChainVideoProcessor()
+        # roop.globals.VIDEO_CHAIN_PROCESSOR = ChainVideoProcessor()
+        roop.globals.VIDEO_CHAIN_PROCESSOR = ChainVideoImageProcessor()
         roop.globals.IMAGE_CHAIN_PROCESSOR.init_with_plugins()
         roop.globals.BATCH_IMAGE_CHAIN_PROCESSOR.init_with_plugins()
         roop.globals.VIDEO_CHAIN_PROCESSOR.init_with_plugins()
@@ -310,14 +311,17 @@ def batch_process(files, use_clip, new_clip_text) -> None:
                 util.create_video(v, videofinalnames[index], fps)
             else:
                 update_status(f'Creating video with {fps} FPS...')
-                roop.globals.VIDEO_CHAIN_PROCESSOR.run_video_chain(v,videofinalnames[index], fps, roop.globals.execution_threads, processors, params_gen_func, roop.globals.target_path)
+                roop.globals.VIDEO_CHAIN_PROCESSOR.run_batch_chain(v, videofinalnames[index], fps,
+                                                                    roop.globals.execution_threads, roop.globals.CFG.frame_buffer_size,
+                                                                      processors, params_gen_func)
+                # roop.globals.VIDEO_CHAIN_PROCESSOR.run_video_chain(v,videofinalnames[index], fps, roop.globals.execution_threads, processors, params_gen_func, roop.globals.target_path)
             if os.path.isfile(videofinalnames[index]):
                 if util.has_extension(v, ['gif']):
-                    gifname = roop.utilities.get_destfilename_from_path(v, './output', '_fake.gif')
+                    gifname = util.get_destfilename_from_path(v, './output', '_fake.gif')
                     update_status('Creating final GIF')
                     util.create_gif_from_video(videofinalnames[index], gifname)
                 elif not roop.globals.skip_audio:
-                    finalname = roop.utilities.get_destfilename_from_path(videofinalnames[index], roop.globals.output_path, f'_final.{roop.globals.CFG.output_video_format}')
+                    finalname = util.get_destfilename_from_path(videofinalnames[index], roop.globals.output_path, f'_final.{roop.globals.CFG.output_video_format}')
                     util.restore_audio(videofinalnames[index], v, finalname)
                     if os.path.isfile(finalname):
                         os.remove(videofinalnames[index])

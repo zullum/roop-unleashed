@@ -47,6 +47,9 @@ cam_swapping = False
 
 selected_preview_index = 0
 
+is_processing = False            
+
+
 
 def prepare_environment():
     roop.globals.output_path = os.path.abspath(os.path.join(os.getcwd(), "output"))
@@ -233,9 +236,11 @@ def run():
                 with gr.Row():
                     with gr.Column():
                         settings_controls.append(gr.Dropdown(providerlist, label="Provider", value=roop.globals.CFG.provider, elem_id='provider', interactive=True))
+                        settings_controls.append(gr.Checkbox(label="Force CPU for Face Analyser", value=roop.globals.CFG.force_cpu, elem_id='force_cpu', interactive=True))
                         max_threads = gr.Slider(1, 64, value=roop.globals.CFG.max_threads, label="Max. Number of Threads", info='default: 8', step=1.0, interactive=True)
-                        memory_limit = gr.Slider(0, 128, value=roop.globals.CFG.memory_limit, label="Max. Memory to use (Gb)", info='0 meaning no limit', step=1.0, interactive=True)
                     with gr.Column():
+                        memory_limit = gr.Slider(0, 128, value=roop.globals.CFG.memory_limit, label="Max. Memory to use (Gb)", info='0 meaning no limit', step=1.0, interactive=True)
+                        frame_buffer_size = gr.Slider(0, 512, value=roop.globals.CFG.frame_buffer_size, label="Frame Buffer Size", info='Num. Images to preload for each thread', step=1.0, interactive=True)
                         settings_controls.append(gr.Dropdown(image_formats, label="Image Output Format", info='default: png', value=roop.globals.CFG.output_image_format, elem_id='output_image_format', interactive=True))
                     with gr.Column():
                         settings_controls.append(gr.Dropdown(video_codecs, label="Video Codec", info='default: libx264', value=roop.globals.CFG.output_video_codec, elem_id='output_video_codec', interactive=True))
@@ -299,6 +304,7 @@ def run():
                 s.select(fn=on_settings_changed)
             max_threads.input(fn=lambda a,b='max_threads':on_settings_changed_misc(a,b), inputs=[max_threads])
             memory_limit.input(fn=lambda a,b='memory_limit':on_settings_changed_misc(a,b), inputs=[memory_limit])
+            frame_buffer_size.input(fn=lambda a,b='frame_buffer_size':on_settings_changed_misc(a,b), inputs=[frame_buffer_size])
             video_quality.input(fn=lambda a,b='video_quality':on_settings_changed_misc(a,b), inputs=[video_quality])
 
             button_clean_temp.click(fn=clean_temp, outputs=[bt_srcimg, input_faces, target_faces, bt_destfiles])
@@ -492,11 +498,11 @@ def on_end_face_selection():
 
 
 def on_preview_frame_changed(frame_num, files, fake_preview, enhancer, detection, face_distance, blend_ratio, use_clip, clip_text):
-    global SELECTED_INPUT_FACE_INDEX
+    global SELECTED_INPUT_FACE_INDEX, is_processing
 
     from roop.core import live_swap
 
-    if files is None or selected_preview_index >= len(files):
+    if is_processing or files is None or selected_preview_index >= len(files) or frame_num is None:
         return None
 
     filename = files[selected_preview_index].name
@@ -527,7 +533,11 @@ def on_preview_frame_changed(frame_num, files, fake_preview, enhancer, detection
 
 def on_preview_mask(frame_num, files, clip_text):
     from roop.core import preview_mask
-    
+    global is_processing
+
+    if is_processing:
+        return None
+        
     filename = files[selected_preview_index].name
     if util.is_video(filename) or filename.lower().endswith('gif'):
         current_frame = get_video_frame(filename, frame_num)
@@ -572,13 +582,15 @@ def translate_swap_mode(dropdown_text):
 
 def start_swap(enhancer, detection, keep_fps, keep_frames, skip_audio, face_distance, blend_ratio, target_files, use_clip, clip_text):
     from roop.core import batch_process
+    global is_processing
 
     if target_files is None or len(target_files) <= 0:
         return None, None
     
     if roop.globals.CFG.clear_output:
         shutil.rmtree(roop.globals.output_path)
-        
+
+
     prepare_environment()
 
     roop.globals.selected_enhancer = enhancer
@@ -596,7 +608,8 @@ def start_swap(enhancer, detection, keep_fps, keep_frames, skip_audio, face_dist
         if len(roop.globals.TARGET_FACES) < 1:
             gr.Error('No Target Face selected!')
             return None, None
-            
+
+    is_processing = True            
     roop.globals.execution_threads = roop.globals.CFG.max_threads
     roop.globals.video_encoder = roop.globals.CFG.output_video_codec
     roop.globals.video_quality = roop.globals.CFG.video_quality
@@ -604,6 +617,7 @@ def start_swap(enhancer, detection, keep_fps, keep_frames, skip_audio, face_dist
          
 
     batch_process([file.name for file in target_files], use_clip, clip_text)
+    is_processing = False
     outdir = pathlib.Path(roop.globals.output_path)
     outfiles = [item for item in outdir.iterdir() if item.is_file()]
     if len(outfiles) > 0:

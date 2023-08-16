@@ -33,7 +33,9 @@ class Settings:
         self.live_cam_start_active = self.default_get(data, 'live_cam_start_active', False)
         self.max_threads = self.default_get(data, 'max_threads', 8)
         self.memory_limit = self.default_get(data, 'memory_limit', 0)
+        self.frame_buffer_size = self.default_get(data, 'frame_buffer_size', 32)
         self.provider = self.default_get(data, 'provider', 'cuda')
+        self.force_cpu = self.default_get(data, 'force_cpu', True)
 
 
 
@@ -52,7 +54,9 @@ class Settings:
             'live_cam_start_active' : self.live_cam_start_active,
             'max_threads' : self.max_threads,
             'memory_limit' : self.memory_limit,
-            'provider' : self.provider
+            'frame_buffer_size' : self.frame_buffer_size,
+            'provider' : self.provider,
+            'force_cpu' : self.force_cpu
         }
         with open(self.config_file, 'w') as f:
             yaml.dump(data, f)
