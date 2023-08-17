@@ -31,11 +31,11 @@ class Settings:
         self.video_quality = self.default_get(data, 'video_quality', 14)
         self.clear_output = self.default_get(data, 'clear_output', True)
         self.live_cam_start_active = self.default_get(data, 'live_cam_start_active', False)
-        self.max_threads = self.default_get(data, 'max_threads', 8)
+        self.max_threads = self.default_get(data, 'max_threads', 4)
         self.memory_limit = self.default_get(data, 'memory_limit', 0)
-        self.frame_buffer_size = self.default_get(data, 'frame_buffer_size', 32)
+        self.frame_buffer_size = self.default_get(data, 'frame_buffer_size', 4)
         self.provider = self.default_get(data, 'provider', 'cuda')
-        self.force_cpu = self.default_get(data, 'force_cpu', True)
+        self.force_cpu = self.default_get(data, 'force_cpu', False)
 
 
 

@@ -3,7 +3,7 @@ from roop.typing import Frame
 import psutil
 import os
 from concurrent.futures import ThreadPoolExecutor, as_completed, wait, FIRST_COMPLETED
-from threading import Thread
+from threading import Thread, Lock
 from time import sleep, time
 from queue import Queue
 from .image import ChainImgProcessor
@@ -22,6 +22,8 @@ class ChainVideoImageProcessor(ChainImgProcessor):
     reading_frames = False
     buffer_wait_time = 0.1
     loadbuffersize = 0 
+
+    lock = Lock()
 
     frames_queue = None
     processed_queue = None
@@ -55,24 +57,33 @@ class ChainVideoImageProcessor(ChainImgProcessor):
     def read_frames_thread(self, cap, num_threads):
         self.reading_frames = True
 
-        num_frame = 0
+        num_frame = -1
         while True:
             ret, frame = cap.read()
             if not ret:
                 break
+            num_frame += 1
             self.frames_queue.put((num_frame,frame))
 
         self.reading_frames = False
 
-    def process_frames(self, threadindex, progress) -> None:
+    def process_frames(self, progress) -> None:
         my_list = []
         while True:
             while len(my_list) > 0:
                 index,frame = my_list[0]
-                if self.last_index + 1 == index:
+                myframe = False
+
+                with self.lock:
+                    if self.last_index + 1 == index:
+                        self.last_index = index
+                        myframe = True
+                
+                if myframe:
                     self.processed_queue.put(my_list.pop(0))
                 else:
                     break
+
             try:
                 frametuple = self.frames_queue.get_nowait()
                 index,frame = frametuple
@@ -81,10 +92,12 @@ class ChainVideoImageProcessor(ChainImgProcessor):
                 else:
                     params = {}
                 resimg, _ = self.run_chain(frame, params, self.chain)
-                if self.last_index + 1 == index:
-                    self.processed_queue.put((index,resimg))
-                else:
-                    my_list.append((index,resimg))
+                with self.lock:
+                    if self.last_index + 1 == index:
+                        self.processed_queue.put((index,resimg))
+                        self.last_index = index
+                    else:
+                        my_list.append((index,resimg))
                 progress()
             except:
                 if not self.reading_frames:
@@ -95,10 +108,14 @@ class ChainVideoImageProcessor(ChainImgProcessor):
 
     def write_frames_thread(self, target_video, width, height, fps, total):
         with FFMPEG_VideoWriter(target_video, (width, height), fps, codec=roop.globals.video_encoder, crf=roop.globals.video_quality, audiofile=None) as output_video_ff:
+            lastindex = 0
             while True:
                 try:
                     frametuple = self.processed_queue.get_nowait()        
-                    _, frame = frametuple
+                    index, frame = frametuple
+                    if index < lastindex:
+                        print('Frame order corrupted!')
+                    # assert index >= lastindex
                     output_video_ff.write_frame(frame)
                 except:
                     if self.processing_threads > 0:
@@ -121,13 +138,16 @@ class ChainVideoImageProcessor(ChainImgProcessor):
         self.num_threads = threads
         self.frames_queue = Queue()
         self.processed_queue = Queue()
-        self.current_index = 0
+        self.last_index = -1
 
+        if buffersize < 1:
+            buffersize = 1
         self.loadbuffersize = buffersize
         self.processing_threads = self.num_threads
 
         readthread = Thread(target=self.read_frames_thread, args=(cap, threads))
         readthread.start()
+
 
         # preload buffer
         preload_size = min(frame_count, self.loadbuffersize * self.num_threads)
@@ -144,7 +164,7 @@ class ChainVideoImageProcessor(ChainImgProcessor):
                 futures = []
                 
                 for threadindex in range(threads):
-                    future = executor.submit(self.process_frames, threadindex, lambda: self.update_progress(progress))
+                    future = executor.submit(self.process_frames, lambda: self.update_progress(progress))
                     futures.append(future)
                 
                 for future in as_completed(futures):
