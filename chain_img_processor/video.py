@@ -100,7 +100,7 @@ class ChainVideoImageProcessor(ChainImgProcessor):
                         my_list.append((index,resimg))
                 progress()
             except:
-                if not self.reading_frames:
+                if not self.reading_frames and len(my_list) < 1:
                     self.processing_threads -= 1
                     return
 
