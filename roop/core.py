@@ -110,11 +110,11 @@ def suggest_execution_threads() -> int:
 
 def limit_resources() -> None:
     # prevent tensorflow memory leak
-    gpus = tensorflow.config.experimental.list_physical_devices('GPU')
-    for gpu in gpus:
-        tensorflow.config.experimental.set_virtual_device_configuration(gpu, [
-            tensorflow.config.experimental.VirtualDeviceConfiguration(memory_limit=1024)
-        ])
+    # gpus = tensorflow.config.experimental.list_physical_devices('GPU')
+    # for gpu in gpus:
+    #     tensorflow.config.experimental.set_virtual_device_configuration(gpu, [
+    #         tensorflow.config.experimental.VirtualDeviceConfiguration(memory_limit=1024)
+    #     ])
     # limit memory usage
     if roop.globals.max_memory:
         memory = roop.globals.max_memory * 1024 ** 3
@@ -252,7 +252,7 @@ def params_gen_func(proc, frame):
              "input_face_datas": roop.globals.INPUT_FACES, "target_face_datas": roop.globals.TARGET_FACES,
              "clip_prompt": clip_text}
 
-def batch_process(files, use_clip, new_clip_text) -> None:
+def batch_process(files, use_clip, new_clip_text, use_new_method) -> None:
     global clip_text
 
     InitPlugins()
@@ -300,7 +300,7 @@ def batch_process(files, use_clip, new_clip_text) -> None:
         for index,v in enumerate(videofiles):
             update_status(f'Processing video {v}')
             fps = util.detect_fps(v)
-            if roop.globals.keep_frames:
+            if roop.globals.keep_frames or not use_new_method:
                 update_status('Creating temp resources...')
                 util.create_temp(v)
                 update_status('Extracting frames...')
@@ -309,6 +309,8 @@ def batch_process(files, use_clip, new_clip_text) -> None:
                 roop.globals.BATCH_IMAGE_CHAIN_PROCESSOR.run_batch_chain(temp_frame_paths, temp_frame_paths, roop.globals.execution_threads, processors, params_gen_func)
                 update_status(f'Creating video with {fps} FPS...')
                 util.create_video(v, videofinalnames[index], fps)
+                if not roop.globals.keep_frames:
+                    util.delete_temp_frames(temp_frame_paths[0])
             else:
                 update_status(f'Creating video with {fps} FPS...')
                 roop.globals.VIDEO_CHAIN_PROCESSOR.run_batch_chain(v, videofinalnames[index], fps,

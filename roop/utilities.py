@@ -145,6 +145,12 @@ def clean_temp(target_path: str) -> None:
     if os.path.exists(parent_directory_path) and not os.listdir(parent_directory_path):
         os.rmdir(parent_directory_path)
 
+def delete_temp_frames(filename: str) -> None:
+    dir = os.path.dirname(os.path.dirname(filename))
+    shutil.rmtree(dir)
+ 
+
+
 
 def has_image_extension(image_path: str) -> bool:
     return image_path.lower().endswith(('png', 'jpg', 'jpeg', 'webp'))
@@ -243,69 +249,7 @@ def open_folder(path:str):
         #import webbrowser
         #webbrowser.open(url)
 
-
     
-
-# def open_url(url: str, wait: bool = False, locate: bool = False) -> int:
-#     import subprocess
-
-#     def _unquote_file(url: str) -> str:
-#         from urllib.parse import unquote
-
-#         if url.startswith("file://"):
-#             url = unquote(url[7:])
-
-#         return url
-
-#     if sys.platform == "darwin":
-#         args = ["open"]
-#         if wait:
-#             args.append("-W")
-#         if locate:
-#             args.append("-R")
-#         args.append(_unquote_file(url))
-#         null = open("/dev/null", "w")
-#         try:
-#             return subprocess.Popen(args, stderr=null).wait()
-#         finally:
-#             null.close()
-#     elif WIN:
-#         if locate:
-#             url = _unquote_file(url.replace('"', ""))
-#             args = f'explorer /select,"{url}"'
-#         else:
-#             url = url.replace('"', "")
-#             wait_str = "/WAIT" if wait else ""
-#             args = f'start {wait_str} "" "{url}"'
-#         return os.system(args)
-#     elif CYGWIN:
-#         if locate:
-#             url = os.path.dirname(_unquote_file(url).replace('"', ""))
-#             args = f'cygstart "{url}"'
-#         else:
-#             url = url.replace('"', "")
-#             wait_str = "-w" if wait else ""
-#             args = f'cygstart {wait_str} "{url}"'
-#         return os.system(args)
-
-#     try:
-#         if locate:
-#             url = os.path.dirname(_unquote_file(url)) or "."
-#         else:
-#             url = _unquote_file(url)
-#         c = subprocess.Popen(["xdg-open", url])
-#         if wait:
-#             return c.wait()
-#         return 0
-#     except OSError:
-#         if url.startswith(("http://", "https://")) and not locate and not wait:
-#             import webbrowser
-
-#             webbrowser.open(url)
-#             return 0
-#         return 1
-
-
 
 def create_version_html():
     python_version = ".".join([str(x) for x in sys.version_info[0:3]])

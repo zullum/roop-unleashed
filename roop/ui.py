@@ -117,13 +117,14 @@ def run():
             
                 with gr.Row():
                     with gr.Column(scale=1):
-                        selected_face_detection = gr.Dropdown(["First found", "All faces", "Selected face", "All female", "All male"], value="First found", label="Select face swapping method")
+                        selected_face_detection = gr.Dropdown(["First found", "All faces", "Selected face", "All female", "All male"], value="First found", label="Select face selection for swapping")
                         max_face_distance = gr.Slider(0.01, 1.0, value=0.65, label="Max Face Similarity Threshold")
                     with gr.Column(scale=1):
+                        video_swapping_method = gr.Dropdown(["Extract Frames to media","In-Memory processing"], value="In-Memory", label="Select video processing method", interactive=True)
                         chk_det_size = gr.Checkbox(label="Use default Det-Size", value=True, elem_id='default_det_size', interactive=True)
                     with gr.Column(scale=2):
                         roop.globals.keep_fps = gr.Checkbox(label="Keep FPS", value=True)
-                        roop.globals.keep_frames = gr.Checkbox(label="Keep Frames", value=False)
+                        roop.globals.keep_frames = gr.Checkbox(label="Keep Frames (relevant only when extracting frames)", value=False)
                         roop.globals.skip_audio = gr.Checkbox(label="Skip audio", value=False)
                 with gr.Row():
                     with gr.Column():
@@ -277,7 +278,7 @@ def run():
 
             bt_start.click(fn=start_swap, 
                 inputs=[selected_enhancer, selected_face_detection, roop.globals.keep_fps, roop.globals.keep_frames,
-                         roop.globals.skip_audio, max_face_distance, blend_ratio, bt_destfiles, chk_useclip, clip_text],
+                         roop.globals.skip_audio, max_face_distance, blend_ratio, bt_destfiles, chk_useclip, clip_text,video_swapping_method],
                 outputs=[resultfiles, resultimage])
             
             previewinputs = [preview_frame_num, bt_destfiles, fake_preview, selected_enhancer, selected_face_detection,
@@ -580,7 +581,8 @@ def translate_swap_mode(dropdown_text):
         
 
 
-def start_swap(enhancer, detection, keep_fps, keep_frames, skip_audio, face_distance, blend_ratio, target_files, use_clip, clip_text):
+def start_swap(enhancer, detection, keep_fps, keep_frames, skip_audio, face_distance, blend_ratio,
+                target_files, use_clip, clip_text, processing_method):
     from roop.core import batch_process
     global is_processing
 
@@ -615,8 +617,7 @@ def start_swap(enhancer, detection, keep_fps, keep_frames, skip_audio, face_dist
     roop.globals.video_quality = roop.globals.CFG.video_quality
     roop.globals.max_memory = roop.globals.CFG.memory_limit if roop.globals.CFG.memory_limit > 0 else None
          
-
-    batch_process([file.name for file in target_files], use_clip, clip_text)
+    batch_process([file.name for file in target_files], use_clip, clip_text, processing_method == "In-Memory")
     is_processing = False
     outdir = pathlib.Path(roop.globals.output_path)
     outfiles = [item for item in outdir.iterdir() if item.is_file()]
