@@ -1,2 +1,2 @@
 name = 'roop unleashed'
-version = '2.7.6'
+version = '2.7.7'

@@ -241,7 +241,7 @@ def run():
                         max_threads = gr.Slider(1, 64, value=roop.globals.CFG.max_threads, label="Max. Number of Threads", info='default: 8', step=1.0, interactive=True)
                     with gr.Column():
                         memory_limit = gr.Slider(0, 128, value=roop.globals.CFG.memory_limit, label="Max. Memory to use (Gb)", info='0 meaning no limit', step=1.0, interactive=True)
-                        frame_buffer_size = gr.Slider(0, 512, value=roop.globals.CFG.frame_buffer_size, label="Frame Buffer Size", info='Num. Images to preload for each thread', step=1.0, interactive=True)
+                        frame_buffer_size = gr.Slider(1, 512, value=roop.globals.CFG.frame_buffer_size, label="Frame Buffer Size", info='Num. Images to preload for each thread', step=1.0, interactive=True)
                         settings_controls.append(gr.Dropdown(image_formats, label="Image Output Format", info='default: png', value=roop.globals.CFG.output_image_format, elem_id='output_image_format', interactive=True))
                     with gr.Column():
                         settings_controls.append(gr.Dropdown(video_codecs, label="Video Codec", info='default: libx264', value=roop.globals.CFG.output_video_codec, elem_id='output_video_codec', interactive=True))
@@ -279,7 +279,7 @@ def run():
             bt_start.click(fn=start_swap, 
                 inputs=[selected_enhancer, selected_face_detection, roop.globals.keep_fps, roop.globals.keep_frames,
                          roop.globals.skip_audio, max_face_distance, blend_ratio, bt_destfiles, chk_useclip, clip_text,video_swapping_method],
-                outputs=[resultfiles, resultimage])
+                outputs=[bt_start, resultfiles, resultimage])
             
             previewinputs = [preview_frame_num, bt_destfiles, fake_preview, selected_enhancer, selected_face_detection,
                                 max_face_distance, blend_ratio, chk_useclip, clip_text] 
@@ -586,8 +586,13 @@ def start_swap(enhancer, detection, keep_fps, keep_frames, skip_audio, face_dist
     from roop.core import batch_process
     global is_processing
 
+    if is_processing:
+        print('Clicked Stop')
+        yield gr.Button.update(value="Start"),gr.Files.update(visible=True), gr.Image.update(visible=True)
+        return
+        
     if target_files is None or len(target_files) <= 0:
-        return None, None
+        return gr.Button.update(value="Start"), None, None
     
     if roop.globals.CFG.clear_output:
         shutil.rmtree(roop.globals.output_path)
@@ -609,9 +614,10 @@ def start_swap(enhancer, detection, keep_fps, keep_frames, skip_audio, face_dist
     if roop.globals.face_swap_mode == 'selected':
         if len(roop.globals.TARGET_FACES) < 1:
             gr.Error('No Target Face selected!')
-            return None, None
+            return gr.Button.update(value="Start"),None, None
 
     is_processing = True            
+    yield gr.Button.update(value="Stop"), None, None
     roop.globals.execution_threads = roop.globals.CFG.max_threads
     roop.globals.video_encoder = roop.globals.CFG.output_video_codec
     roop.globals.video_quality = roop.globals.CFG.video_quality
@@ -622,8 +628,9 @@ def start_swap(enhancer, detection, keep_fps, keep_frames, skip_audio, face_dist
     outdir = pathlib.Path(roop.globals.output_path)
     outfiles = [item for item in outdir.iterdir() if item.is_file()]
     if len(outfiles) > 0:
-        return outfiles, outfiles[0]
-    return None, None
+        yield gr.Button.update(value="Start"),gr.Files.update(value=outfiles), gr.Image.update(value=outfiles[0])
+    else:
+        yield gr.Button.update(value="Start"),None, None
 
    
 def on_destfiles_changed(destfiles):
