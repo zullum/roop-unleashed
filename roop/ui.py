@@ -80,7 +80,11 @@ def run():
     
     run_server = True
     mycss = """
-        span {color: var(--block-info-text-color)}        
+        span {color: var(--block-info-text-color)}
+        #filelist {
+            max-height: 238.4px;
+            overflow-y: auto !important;
+        }
 """
 
     while run_server:
