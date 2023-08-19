@@ -28,6 +28,8 @@ blend_ratio = 0.5
 distance_threshold = 0.65
 default_det_size = True
 
+processing = False 
+
 FACE_ENHANCER = None
 
 INPUT_FACES = []

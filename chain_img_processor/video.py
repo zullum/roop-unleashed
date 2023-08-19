@@ -4,7 +4,6 @@ import psutil
 import os
 from concurrent.futures import ThreadPoolExecutor, as_completed, wait, FIRST_COMPLETED
 from threading import Thread, Lock
-from time import sleep, time
 from queue import Queue, PriorityQueue
 from .image import ChainImgProcessor
 from tqdm import tqdm
@@ -44,25 +43,29 @@ class ChainVideoImageProcessor(ChainImgProcessor):
     def update_progress(self, progress: Any = None) -> None:
         process = psutil.Process(os.getpid())
         memory_usage = process.memory_info().rss / 1024 / 1024 / 1024
+        msg = 'memory_usage: ' + '{:.2f}'.format(memory_usage).zfill(5) + f' GB execution_threads {self.num_threads}'
+        progress.set_description(msg)
         progress.set_postfix({
             'memory_usage': '{:.2f}'.format(memory_usage).zfill(5) + 'GB',
             'execution_threads': self.num_threads
         })
         progress.update(1)
-        progress.refresh()
 
 
     def read_frames_thread(self, cap, num_threads):
         num_frame = -1
-        while True:
+        while True and roop.globals.processing:
             ret, frame = cap.read()
             if not ret:
-                for i in range(num_threads):
+                for _ in range(num_threads):
                     self.frames_queue.put(None)
                 break
                 
             num_frame += 1
             self.frames_queue.put((num_frame,frame), block=True)
+        for _ in range(num_threads):
+            self.frames_queue.put(None)
+
 
 
     def process_frames(self, progress) -> None:
@@ -89,19 +92,17 @@ class ChainVideoImageProcessor(ChainImgProcessor):
             num_producers = self.num_threads
             order_buffer = PriorityQueue()
             
-            while True:
+            while True and roop.globals.processing:
                 while not order_buffer.empty():
                     frametuple = order_buffer.get_nowait()
                     index, frame = frametuple
                     if index == nextindex:
-                        # print(f'\nWriting cached {index}')
                         output_video_ff.write_frame(frame)
                         del frame
                         del frametuple
                         nextindex += 1
                     else:
                         order_buffer.put(frametuple)
-                        # print(f'\nPut back {index} for later ({order_buffer.qsize()})!')
                         break
 
                 frametuple = self.processed_queue.get()
@@ -150,8 +151,6 @@ class ChainVideoImageProcessor(ChainImgProcessor):
         writethread = Thread(target=self.write_frames_thread, args=(target_video, width, height, fps, total))
         writethread.start()
 
-        start_processing = time()
-
         with tqdm(total=total, desc='Processing', unit='frame', dynamic_ncols=True, bar_format=progress_bar_format) as progress:
             with ThreadPoolExecutor(thread_name_prefix='swap_proc', max_workers=self.num_threads) as executor:
                 futures = []
@@ -165,7 +164,3 @@ class ChainVideoImageProcessor(ChainImgProcessor):
         # wait for the task to complete
         readthread.join()
         writethread.join()
-
-        print(f'\nProcessing took {time() - start_processing} secs')
-
-

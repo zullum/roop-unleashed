@@ -14,7 +14,9 @@ import signal
 import argparse
 import torch
 import onnxruntime
-import tensorflow
+#import tensorflow
+
+from time import time
 
 import roop.globals
 import roop.metadata
@@ -25,6 +27,9 @@ from roop.face_util import extract_face_images
 from chain_img_processor import ChainImgProcessor, ChainVideoProcessor, ChainBatchImageProcessor, ChainVideoImageProcessor
 
 clip_text = None
+
+call_display_ui = None
+
 
 
 if 'ROCMExecutionProvider' in roop.globals.execution_providers:
@@ -163,11 +168,19 @@ def pre_check() -> bool:
        update_status('ffmpeg is not installed.')
     return True
 
+def set_display_ui(function):
+    global call_display_ui
 
-def update_status(message: str, scope: str = 'ROOP.CORE') -> None:
-    print(f'[{scope}] {message}')
-    # if not roop.globals.headless:
-        # ui.update_status(message)
+    call_display_ui = function
+
+
+def update_status(message: str) -> None:
+    global call_display_ui
+
+    print(message)
+    if call_display_ui is not None:
+        call_display_ui(message)
+
 
 
 
@@ -243,7 +256,6 @@ def preview_mask(frame, clip_text):
 
 
 
-
 def params_gen_func(proc, frame):
     global clip_text
 
@@ -255,6 +267,7 @@ def params_gen_func(proc, frame):
 def batch_process(files, use_clip, new_clip_text, use_new_method) -> None:
     global clip_text
 
+    roop.globals.processing = True
     InitPlugins()
     processors = get_processing_plugins(use_clip)
     release_resources()
@@ -298,25 +311,40 @@ def batch_process(files, use_clip, new_clip_text, use_new_method) -> None:
         roop.globals.BATCH_IMAGE_CHAIN_PROCESSOR.run_batch_chain(imagefiles, imagefinalnames, roop.globals.execution_threads, processors, params_gen_func)
     if(len(videofiles) > 0):
         for index,v in enumerate(videofiles):
-            update_status(f'Processing video {v}')
+            if not roop.globals.processing:
+                end_processing('Processing stopped!')
+                return
+
+            start_processing = time()
+
             fps = util.detect_fps(v)
+            update_status(f'Creating {os.path.basename(videofinalnames[index])} with {fps} FPS...')
             if roop.globals.keep_frames or not use_new_method:
-                update_status('Creating temp resources...')
                 util.create_temp(v)
                 update_status('Extracting frames...')
                 util.extract_frames(v)
+                if not roop.globals.processing:
+                    end_processing('Processing stopped!')
+                    return
+
                 temp_frame_paths = util.get_temp_frame_paths(v)
                 roop.globals.BATCH_IMAGE_CHAIN_PROCESSOR.run_batch_chain(temp_frame_paths, temp_frame_paths, roop.globals.execution_threads, processors, params_gen_func)
-                update_status(f'Creating video with {fps} FPS...')
+                if not roop.globals.processing:
+                    end_processing('Processing stopped!')
+                    return
+                
                 util.create_video(v, videofinalnames[index], fps)
                 if not roop.globals.keep_frames:
                     util.delete_temp_frames(temp_frame_paths[0])
             else:
-                update_status(f'Creating video with {fps} FPS...')
                 roop.globals.VIDEO_CHAIN_PROCESSOR.run_batch_chain(v, videofinalnames[index], fps,
                                                                     roop.globals.execution_threads, roop.globals.CFG.frame_buffer_size,
                                                                       processors, params_gen_func)
-                # roop.globals.VIDEO_CHAIN_PROCESSOR.run_video_chain(v,videofinalnames[index], fps, roop.globals.execution_threads, processors, params_gen_func, roop.globals.target_path)
+                
+            if not roop.globals.processing:
+                end_processing('Processing stopped!')
+                return
+            
             if os.path.isfile(videofinalnames[index]):
                 if util.has_extension(v, ['gif']):
                     gifname = util.get_destfilename_from_path(v, './output', '_fake.gif')
@@ -327,13 +355,19 @@ def batch_process(files, use_clip, new_clip_text, use_new_method) -> None:
                     util.restore_audio(videofinalnames[index], v, finalname)
                     if os.path.isfile(finalname):
                         os.remove(videofinalnames[index])
+                update_status(f'\nProcessing {os.path.basename(videofinalnames[index])} took {time() - start_processing} secs')
+
             else:
                 update_status('Failed!')
             release_resources()
+    end_processing('Finished')
 
-    update_status('Finished')
+
+def end_processing(msg:str):
+    update_status(msg)
     roop.globals.target_folder_path = None
     release_resources()
+
 
 def destroy() -> None:
     if roop.globals.target_path:

@@ -60,7 +60,7 @@ def prepare_environment():
 
 
 def run():
-    from roop.core import suggest_execution_providers, decode_execution_providers
+    from roop.core import suggest_execution_providers, decode_execution_providers, set_display_ui
     global input_faces, target_faces, face_selection, fake_cam_image, restart_server, live_cam_active, on_settings_changed
 
     prepare_environment()
@@ -71,10 +71,10 @@ def run():
     video_codecs = ['libx264', 'libx265', 'libvpx-vp9', 'h264_nvenc', 'hevc_nvenc']
     providerlist = suggest_execution_providers()
     
-        
     settings_controls = []
 
     live_cam_active = roop.globals.CFG.live_cam_start_active
+    set_display_ui(show_msg)
     roop.globals.execution_providers = decode_execution_providers([roop.globals.CFG.provider])
     print(f'Using provider {roop.globals.execution_providers} - Device:{util.get_device()}')
     
@@ -147,7 +147,7 @@ def run():
                     with gr.Column():
                         bt_start = gr.Button("Start", variant='primary')
                     with gr.Column():
-                        gr.Markdown(' ')
+                        bt_stop = gr.Button("Stop", variant='secondary')
                     with gr.Column():
                         fake_preview = gr.Checkbox(label="Face swap frames", value=False)
                     with gr.Column():
@@ -276,10 +276,12 @@ def run():
 
             bt_preview_mask.click(fn=on_preview_mask, inputs=[preview_frame_num, bt_destfiles, clip_text], outputs=[maskpreview]) 
 
-            bt_start.click(fn=start_swap, 
+            start_event = bt_start.click(fn=start_swap, 
                 inputs=[selected_enhancer, selected_face_detection, roop.globals.keep_fps, roop.globals.keep_frames,
                          roop.globals.skip_audio, max_face_distance, blend_ratio, bt_destfiles, chk_useclip, clip_text,video_swapping_method],
                 outputs=[bt_start, resultfiles, resultimage])
+            
+            bt_stop.click(fn=stop_swap, cancels=[start_event])
             
             previewinputs = [preview_frame_num, bt_destfiles, fake_preview, selected_enhancer, selected_face_detection,
                                 max_face_distance, blend_ratio, chk_useclip, clip_text] 
@@ -316,7 +318,7 @@ def run():
 
         restart_server = False
         try:
-            ui.queue().launch(inbrowser=True, server_name=server_name, server_port=server_port, share=roop.globals.CFG.server_share, ssl_verify=ssl_verify, prevent_thread_lock=True, show_error=True)
+            ui.queue().launch(inbrowser=True, server_name=server_name, server_port=server_port, share=roop.globals.CFG.server_share, ssl_verify=ssl_verify, prevent_thread_lock=False, show_error=True)
         except:
             restart_server = True
             run_server = False
@@ -581,18 +583,13 @@ def translate_swap_mode(dropdown_text):
         
 
 
-def start_swap(enhancer, detection, keep_fps, keep_frames, skip_audio, face_distance, blend_ratio,
-                target_files, use_clip, clip_text, processing_method):
+def start_swap( enhancer, detection, keep_fps, keep_frames, skip_audio, face_distance, blend_ratio,
+                target_files, use_clip, clip_text, processing_method, progress=gr.Progress(track_tqdm=True)):
     from roop.core import batch_process
     global is_processing
 
-    if is_processing:
-        print('Clicked Stop')
-        yield gr.Button.update(value="Start"),gr.Files.update(visible=True), gr.Image.update(visible=True)
-        return
-        
     if target_files is None or len(target_files) <= 0:
-        return gr.Button.update(value="Start"), None, None
+        return gr.Button.update(variant="primary"), None, None
     
     if roop.globals.CFG.clear_output:
         shutil.rmtree(roop.globals.output_path)
@@ -614,23 +611,28 @@ def start_swap(enhancer, detection, keep_fps, keep_frames, skip_audio, face_dist
     if roop.globals.face_swap_mode == 'selected':
         if len(roop.globals.TARGET_FACES) < 1:
             gr.Error('No Target Face selected!')
-            return gr.Button.update(value="Start"),None, None
+            return gr.Button.update(variant="primary"),None, None
 
     is_processing = True            
-    yield gr.Button.update(value="Stop"), None, None
+    yield gr.Button.update(variant="secondary"), None, None
     roop.globals.execution_threads = roop.globals.CFG.max_threads
     roop.globals.video_encoder = roop.globals.CFG.output_video_codec
     roop.globals.video_quality = roop.globals.CFG.video_quality
     roop.globals.max_memory = roop.globals.CFG.memory_limit if roop.globals.CFG.memory_limit > 0 else None
-         
+
     batch_process([file.name for file in target_files], use_clip, clip_text, processing_method == "In-Memory")
     is_processing = False
     outdir = pathlib.Path(roop.globals.output_path)
     outfiles = [item for item in outdir.iterdir() if item.is_file()]
     if len(outfiles) > 0:
-        yield gr.Button.update(value="Start"),gr.Files.update(value=outfiles), gr.Image.update(value=outfiles[0])
+        yield gr.Button.update(variant="primary"),gr.Files.update(value=outfiles), gr.Image.update(value=outfiles[0])
     else:
-        yield gr.Button.update(value="Start"),None, None
+        yield gr.Button.update(variant="primary"),None, None
+
+
+def stop_swap():
+    roop.globals.processing = False
+    gr.Info('Aborting processing - please wait for the remaining threads to be stopped')
 
    
 def on_destfiles_changed(destfiles):
@@ -786,12 +788,15 @@ def apply_settings(themes, input_server_name, input_server_port):
     roop.globals.CFG.server_name = input_server_name
     roop.globals.CFG.server_port = input_server_port
     roop.globals.CFG.save()
-    gr.Info('Settings saved')
+    show_msg('Settings saved')
 
 def restart():
     global restart_server
     restart_server = True
 
+
+def show_msg(msg: str):
+    gr.Info(msg)
 
 
 
