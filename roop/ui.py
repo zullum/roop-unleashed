@@ -265,8 +265,11 @@ def run():
             target_faces.select(on_select_target_face, None, None)
             bt_remove_selected_target_face.click(fn=remove_selected_target_face, outputs=[target_faces])
 
-            bt_destfiles.change(fn=on_destfiles_changed, inputs=[bt_destfiles], outputs=[previewimage, preview_frame_num])
-            bt_destfiles.select(fn=on_destfiles_selected, inputs=[bt_destfiles], outputs=[previewimage, preview_frame_num])
+            previewinputs = [preview_frame_num, bt_destfiles, fake_preview, selected_enhancer, selected_face_detection,
+                                max_face_distance, blend_ratio, chk_useclip, clip_text] 
+
+            bt_destfiles.change(fn=on_destfiles_changed, inputs=[bt_destfiles], outputs=[previewimage, preview_frame_num]).then(fn=on_preview_frame_changed, inputs=previewinputs, outputs=[previewimage])
+            bt_destfiles.select(fn=on_destfiles_selected, inputs=[bt_destfiles], outputs=[previewimage, preview_frame_num]).then(fn=on_preview_frame_changed, inputs=previewinputs, outputs=[previewimage])
             bt_destfiles.clear(fn=on_clear_destfiles, outputs=[target_faces])
             resultfiles.select(fn=on_resultfiles_selected, inputs=[resultfiles], outputs=[resultimage])
 
@@ -287,8 +290,6 @@ def run():
             
             bt_stop.click(fn=stop_swap, cancels=[start_event])
             
-            previewinputs = [preview_frame_num, bt_destfiles, fake_preview, selected_enhancer, selected_face_detection,
-                                max_face_distance, blend_ratio, chk_useclip, clip_text] 
             bt_refresh_preview.click(fn=on_preview_frame_changed, inputs=previewinputs, outputs=[previewimage])            
             fake_preview.change(fn=on_preview_frame_changed, inputs=previewinputs, outputs=[previewimage])
             preview_frame_num.change(fn=on_preview_frame_changed, inputs=previewinputs, outputs=[previewimage], show_progress='hidden')
@@ -448,14 +449,8 @@ def on_use_face_from_selected(files, frame_num):
     IS_INPUT = False
     thumbs = []
     
-    # Using frame_num instead of selected_preview_index for images to enable selection of different images for preview.
-    # This is a workaround for selected_preview_index usually being 0, which references the first file uploaded.
-    # TODO: Consider refactoring this part for a more robust solution.
-
-    roop.globals.target_path = files[selected_preview_index].name 
-    target_image_path = files[frame_num].name
-    if util.is_image(target_image_path) and not roop.globals.target_path.lower().endswith(('gif')):
-        roop.globals.target_path = target_image_path
+    roop.globals.target_path = files[selected_preview_index].name
+    if util.is_image(roop.globals.target_path) and not roop.globals.target_path.lower().endswith(('gif')):
         SELECTION_FACES_DATA = extract_face_images(roop.globals.target_path,  (False, 0))
         if len(SELECTION_FACES_DATA) > 0:
             for f in SELECTION_FACES_DATA:
@@ -522,8 +517,7 @@ def on_preview_frame_changed(frame_num, files, fake_preview, enhancer, detection
     if util.is_video(filename) or filename.lower().endswith('gif'):
         current_frame = get_video_frame(filename, frame_num)
     else:
-        image_file = files[frame_num].name
-        current_frame = get_image_frame(image_file)
+        current_frame = get_image_frame(filename)
     if current_frame is None:
         return None 
 
@@ -556,8 +550,7 @@ def on_preview_mask(frame_num, files, clip_text):
     if util.is_video(filename) or filename.lower().endswith('gif'):
         current_frame = get_video_frame(filename, frame_num)
     else:
-        image_file = files[frame_num].name
-        current_frame = get_image_frame(image_file)
+        current_frame = get_image_frame(filename)
     if current_frame is None:
         return None
 
@@ -660,7 +653,7 @@ def on_destfiles_changed(destfiles):
         total_frames = get_video_frame_total(filename)
     else:
         current_frame = get_image_frame(filename)
-        total_frames = len(destfiles) - 1
+        total_frames = 0
     
     current_frame = convert_to_gradio(current_frame)
     return current_frame, gr.Slider.update(value=0, maximum=total_frames)
@@ -675,15 +668,13 @@ def on_destfiles_selected(evt: gr.SelectData, target_files):
     filename = target_files[selected_preview_index].name
     if util.is_video(filename) or filename.lower().endswith('gif'):
         current_frame = get_video_frame(filename, 0)
-        frame_num = 0
         total_frames = get_video_frame_total(filename)
     else:
         current_frame = get_image_frame(filename)
-        frame_num = next((i for i, file_obj in enumerate(target_files) if file_obj.name == filename), None)
-        total_frames = len(target_files) - 1
+        total_frames = 0
 
     current_frame = convert_to_gradio(current_frame)
-    return current_frame, gr.Slider.update(value=frame_num, maximum=total_frames)
+    return current_frame, gr.Slider.update(value=0, maximum=total_frames)
     
 
 def on_resultfiles_selected(evt: gr.SelectData, files):

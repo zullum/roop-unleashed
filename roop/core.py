@@ -358,7 +358,7 @@ def batch_process(files, use_clip, new_clip_text, use_new_method) -> None:
                 update_status(f'\nProcessing {os.path.basename(videofinalnames[index])} took {time() - start_processing} secs')
 
             else:
-                update_status('Failed!')
+                update_status(f'Failed processing {os.path.basename(videofinalnames[index])}!')
             release_resources()
     end_processing('Finished')
 

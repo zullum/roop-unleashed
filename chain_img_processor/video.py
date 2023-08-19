@@ -151,7 +151,7 @@ class ChainVideoImageProcessor(ChainImgProcessor):
         writethread = Thread(target=self.write_frames_thread, args=(target_video, width, height, fps, total))
         writethread.start()
 
-        with tqdm(total=total, desc='Processing', unit='frame', dynamic_ncols=True, bar_format=progress_bar_format) as progress:
+        with tqdm(total=total, desc='Processing', unit='frames', dynamic_ncols=True, bar_format=progress_bar_format) as progress:
             with ThreadPoolExecutor(thread_name_prefix='swap_proc', max_workers=self.num_threads) as executor:
                 futures = []
                 

@@ -6,6 +6,7 @@ from queue import Queue
 from .image import ChainImgProcessor
 from tqdm import tqdm
 import cv2
+import roop.globals
 
 def create_queue(temp_frame_paths: List[str]) -> Queue[str]:
     queue: Queue[str] = Queue()
@@ -53,6 +54,9 @@ class ChainBatchImageProcessor(ChainImgProcessor):
 
     def process_frames(self, source_files: List[str], target_files: List[str], current_files, update: Callable[[], None]) -> None:
         for f in current_files:
+            if not roop.globals.processing:
+                return
+            
             temp_frame = cv2.imread(f)
             if temp_frame is not None:
                 if self.func_params_gen:
