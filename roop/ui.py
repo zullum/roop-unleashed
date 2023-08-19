@@ -442,8 +442,14 @@ def on_use_face_from_selected(files, frame_num):
     IS_INPUT = False
     thumbs = []
     
-    roop.globals.target_path = files[selected_preview_index].name
-    if util.is_image(roop.globals.target_path) and not roop.globals.target_path.lower().endswith(('gif')):
+    # Using frame_num instead of selected_preview_index for images to enable selection of different images for preview.
+    # This is a workaround for selected_preview_index usually being 0, which references the first file uploaded.
+    # TODO: Consider refactoring this part for a more robust solution.
+
+    roop.globals.target_path = files[selected_preview_index].name 
+    target_image_path = files[frame_num].name
+    if util.is_image(target_image_path) and not roop.globals.target_path.lower().endswith(('gif')):
+        roop.globals.target_path = target_image_path
         SELECTION_FACES_DATA = extract_face_images(roop.globals.target_path,  (False, 0))
         if len(SELECTION_FACES_DATA) > 0:
             for f in SELECTION_FACES_DATA:
@@ -510,7 +516,8 @@ def on_preview_frame_changed(frame_num, files, fake_preview, enhancer, detection
     if util.is_video(filename) or filename.lower().endswith('gif'):
         current_frame = get_video_frame(filename, frame_num)
     else:
-        current_frame = get_image_frame(filename)
+        image_file = files[frame_num].name
+        current_frame = get_image_frame(image_file)
     if current_frame is None:
         return None 
 
@@ -543,7 +550,8 @@ def on_preview_mask(frame_num, files, clip_text):
     if util.is_video(filename) or filename.lower().endswith('gif'):
         current_frame = get_video_frame(filename, frame_num)
     else:
-        current_frame = get_image_frame(filename)
+        image_file = files[frame_num].name
+        current_frame = get_image_frame(image_file)
     if current_frame is None:
         return None
 
@@ -646,7 +654,7 @@ def on_destfiles_changed(destfiles):
         total_frames = get_video_frame_total(filename)
     else:
         current_frame = get_image_frame(filename)
-        total_frames = 0
+        total_frames = len(destfiles) - 1
     
     current_frame = convert_to_gradio(current_frame)
     return current_frame, gr.Slider.update(value=0, maximum=total_frames)
@@ -661,13 +669,15 @@ def on_destfiles_selected(evt: gr.SelectData, target_files):
     filename = target_files[selected_preview_index].name
     if util.is_video(filename) or filename.lower().endswith('gif'):
         current_frame = get_video_frame(filename, 0)
+        frame_num = 0
         total_frames = get_video_frame_total(filename)
     else:
         current_frame = get_image_frame(filename)
-        total_frames = 0
-    
+        frame_num = next((i for i, file_obj in enumerate(target_files) if file_obj.name == filename), None)
+        total_frames = len(target_files) - 1
+
     current_frame = convert_to_gradio(current_frame)
-    return current_frame, gr.Slider.update(value=0, maximum=total_frames)
+    return current_frame, gr.Slider.update(value=frame_num, maximum=total_frames)
     
 
 def on_resultfiles_selected(evt: gr.SelectData, files):
