@@ -1,6 +1,5 @@
 from chain_img_processor import ChainImgProcessor, ChainImgPlugin
 import os
-from PIL import Image
 from numpy import asarray
 
 import torch
@@ -87,11 +86,12 @@ class DMDNETPlugin(ChainImgPlugin):
                     temp_face = cv2.resize(temp_face, (end_x - start_x,end_y - start_y), interpolation = cv2.INTER_LANCZOS4)
                     temp_frame = self.paste_into(temp_face, temp_frame, start_x, start_y, end_x, end_y, False)
 
+
         if not "blend_ratio" in params: 
             return temp_frame
-
-        temp_frame = Image.blend(Image.fromarray(frame), Image.fromarray(temp_frame), params["blend_ratio"])
-        return asarray(temp_frame)
+        
+        blend_ratio = params["blend_ratio"]
+        return cv2.addWeighted(temp_frame, blend_ratio, frame, 1.0 - blend_ratio,0)
 
     def check_bbox(self, imgs, boxes):
         boxes = boxes.view(-1, 4, 4)
