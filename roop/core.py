@@ -94,6 +94,16 @@ def decode_execution_providers(execution_providers: List[str]) -> List[str]:
     return [provider for provider, encoded_execution_provider in zip(onnxruntime.get_available_providers(), encode_execution_providers(onnxruntime.get_available_providers()))
             if any(execution_provider in encoded_execution_provider for execution_provider in execution_providers)]
 
+def set_execution_provider(execution_provider: str):
+    longname = decode_execution_providers([execution_provider])[0]
+    allproviders = onnxruntime.get_available_providers()
+    unsupported = ['TensorrtExecutionProvider']
+    filtered = filter(lambda i: i not in unsupported, allproviders)
+    allproviders = list(filtered)
+    if allproviders[0] != longname:
+        allproviders.remove(longname)
+        allproviders.insert(0, longname)
+    roop.globals.execution_providers = allproviders
 
 def suggest_max_memory() -> int:
     if platform.system().lower() == 'darwin':

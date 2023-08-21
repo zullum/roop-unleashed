@@ -3,8 +3,6 @@ import numpy as np
 import onnxruntime
 from chain_img_processor import ChainImgProcessor, ChainImgPlugin
 import os
-import threading
-from PIL import Image
 from numpy import asarray
 
 from roop.utilities import resolve_relative_path
@@ -73,9 +71,9 @@ class GFPGAN(ChainImgPlugin):
 
         if not "blend_ratio" in params: 
             return temp_frame
-
-        temp_frame = Image.blend(Image.fromarray(frame), Image.fromarray(temp_frame), params["blend_ratio"])
-        return asarray(temp_frame)
+        
+        blend_ratio = params["blend_ratio"]
+        return cv2.addWeighted(temp_frame, blend_ratio, frame, 1.0 - blend_ratio,0)
 
 
     def enhance(self, image_array):

@@ -60,7 +60,7 @@ def prepare_environment():
 
 
 def run():
-    from roop.core import suggest_execution_providers, decode_execution_providers, set_display_ui
+    from roop.core import suggest_execution_providers, decode_execution_providers, set_display_ui, set_execution_provider
     global input_faces, target_faces, face_selection, fake_cam_image, restart_server, live_cam_active, on_settings_changed
 
     prepare_environment()
@@ -75,8 +75,8 @@ def run():
 
     live_cam_active = roop.globals.CFG.live_cam_start_active
     set_display_ui(show_msg)
-    roop.globals.execution_providers = decode_execution_providers([roop.globals.CFG.provider])
-    print(f'Using provider {roop.globals.execution_providers} - Device:{util.get_device()}')
+    set_execution_provider(roop.globals.CFG.provider)
+    print(f'Available providers {roop.globals.execution_providers}, using {roop.globals.execution_providers[0]} - Device:{util.get_device()}')
     
     run_server = True
     mycss = """
@@ -257,7 +257,9 @@ def run():
                         button_clean_temp = gr.Button("Clean temp folder")
                         button_apply_settings = gr.Button("Apply Settings")
 
-            input_faces.select(on_select_input_face, None, None)
+            previewinputs = [preview_frame_num, bt_destfiles, fake_preview, selected_enhancer, selected_face_detection,
+                                max_face_distance, blend_ratio, chk_useclip, clip_text] 
+            input_faces.select(on_select_input_face, None, None).then(fn=on_preview_frame_changed, inputs=previewinputs, outputs=[previewimage])
             bt_remove_selected_input_face.click(fn=remove_selected_input_face, outputs=[input_faces])
             bt_srcimg.change(fn=on_srcimg_changed, show_progress='full', inputs=bt_srcimg, outputs=[dynamic_face_selection, face_selection, input_faces])
 
@@ -268,8 +270,8 @@ def run():
             previewinputs = [preview_frame_num, bt_destfiles, fake_preview, selected_enhancer, selected_face_detection,
                                 max_face_distance, blend_ratio, chk_useclip, clip_text] 
 
-            bt_destfiles.change(fn=on_destfiles_changed, inputs=[bt_destfiles], outputs=[previewimage, preview_frame_num]).then(fn=on_preview_frame_changed, inputs=previewinputs, outputs=[previewimage])
-            bt_destfiles.select(fn=on_destfiles_selected, inputs=[bt_destfiles], outputs=[previewimage, preview_frame_num]).then(fn=on_preview_frame_changed, inputs=previewinputs, outputs=[previewimage])
+            bt_destfiles.change(fn=on_destfiles_changed, inputs=[bt_destfiles], outputs=[preview_frame_num]).then(fn=on_preview_frame_changed, inputs=previewinputs, outputs=[previewimage])
+            bt_destfiles.select(fn=on_destfiles_selected, inputs=[bt_destfiles], outputs=[preview_frame_num]).then(fn=on_preview_frame_changed, inputs=previewinputs, outputs=[previewimage])
             bt_destfiles.clear(fn=on_clear_destfiles, outputs=[target_faces])
             resultfiles.select(fn=on_resultfiles_selected, inputs=[resultfiles], outputs=[resultimage])
 
@@ -644,19 +646,16 @@ def on_destfiles_changed(destfiles):
     global selected_preview_index
 
     if destfiles is None or len(destfiles) < 1:
-        return None, gr.Slider.update(value=0, maximum=0)
+        return gr.Slider.update(value=0, maximum=0)
     
     selected_preview_index = 0
     filename = destfiles[selected_preview_index].name
     if util.is_video(filename) or filename.lower().endswith('gif'):
-        current_frame = get_video_frame(filename, 0)
         total_frames = get_video_frame_total(filename)
     else:
-        current_frame = get_image_frame(filename)
         total_frames = 0
     
-    current_frame = convert_to_gradio(current_frame)
-    return current_frame, gr.Slider.update(value=0, maximum=total_frames)
+    return gr.Slider.update(value=0, maximum=total_frames)
 
 
 
@@ -667,14 +666,11 @@ def on_destfiles_selected(evt: gr.SelectData, target_files):
         selected_preview_index = evt.index
     filename = target_files[selected_preview_index].name
     if util.is_video(filename) or filename.lower().endswith('gif'):
-        current_frame = get_video_frame(filename, 0)
         total_frames = get_video_frame_total(filename)
     else:
-        current_frame = get_image_frame(filename)
         total_frames = 0
 
-    current_frame = convert_to_gradio(current_frame)
-    return current_frame, gr.Slider.update(value=0, maximum=total_frames)
+    return gr.Slider.update(value=0, maximum=total_frames)
     
 
 def on_resultfiles_selected(evt: gr.SelectData, files):

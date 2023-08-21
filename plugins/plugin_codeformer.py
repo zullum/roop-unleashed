@@ -5,7 +5,7 @@
 
 from chain_img_processor import ChainImgProcessor, ChainImgPlugin
 import os
-from PIL import Image
+import cv2
 from numpy import asarray
 
 modname = os.path.basename(__file__)[:-3] # calculating modname
@@ -66,12 +66,9 @@ class PluginCodeformer(ChainImgPlugin):
                 options.get("upscale"), options.get("codeformer_fidelity"),
                 options.get("skip_if_no_face"))
 
-        
-
         if not "blend_ratio" in params: 
             return temp_frame
-
-
-        temp_frame = Image.blend(Image.fromarray(img), Image.fromarray(temp_frame), params["blend_ratio"])
-        return asarray(temp_frame)
+        
+        blend_ratio = params["blend_ratio"]
+        return cv2.addWeighted(temp_frame, blend_ratio, img, 1.0 - blend_ratio,0)
 

@@ -40,17 +40,19 @@ class Faceswap(ChainImgPlugin):
         params["face_detected"] = True
         params["processed_faces"] = []
 
+        face_index = 0
+        if "selected_index" in params:
+            face_index = params["selected_index"]
+        if face_index >= len(params["input_face_datas"]):
+            face_index = 0
+
+
         if params["swap_mode"] == "first":
             face = get_first_face(frame)
             if face is None:
                 params["face_detected"] = False
                 return frame
             params["processed_faces"].append(face)
-            face_index = 0
-            if "selected_index" in params:
-                face_index = params["selected_index"]
-            if face_index >= len(params["input_face_datas"]):
-                face_index = 0
             frame = swap_face(params["input_face_datas"][face_index], face, frame) 
             return frame
 
@@ -63,10 +65,9 @@ class Faceswap(ChainImgPlugin):
             dist_threshold = params["face_distance_threshold"]
 
             if params["swap_mode"] == "all":
-                for sf in params["input_face_datas"]:
-                    for face in faces:
-                        params["processed_faces"].append(face)
-                        temp_frame = swap_face(sf, face, temp_frame)
+                for face in faces:
+                    params["processed_faces"].append(face)
+                    temp_frame = swap_face(params["input_face_datas"][face_index], face, temp_frame)
                 return temp_frame
             
             elif params["swap_mode"] == "selected":
@@ -86,7 +87,7 @@ class Faceswap(ChainImgPlugin):
                         face_found = True
                     if face_found:
                         params["processed_faces"].append(face)
-                        temp_frame = swap_face(params["input_face_datas"][0], face, temp_frame)
+                        temp_frame = swap_face(params["input_face_datas"][face_index], face, temp_frame)
                         face_found = False
 
         return temp_frame
