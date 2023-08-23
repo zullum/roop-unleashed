@@ -189,6 +189,9 @@ def resolve_relative_path(path: str) -> str:
     return os.path.abspath(os.path.join(os.path.dirname(__file__), path))
 
 def get_device() -> str:
+    if len(roop.globals.execution_providers) < 1:
+        roop.globals.execution_providers = ['CPUExecutionProvider']
+
     prov = roop.globals.execution_providers[0]
     if 'CUDAExecutionProvider' == prov:
         return 'cuda'
