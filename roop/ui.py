@@ -75,8 +75,10 @@ def run():
 
     live_cam_active = roop.globals.CFG.live_cam_start_active
     set_display_ui(show_msg)
-    set_execution_provider(roop.globals.CFG.provider)
-    print(f'Available providers {roop.globals.execution_providers}, using {roop.globals.execution_providers[0]} - Device:{util.get_device()}')
+    roop.globals.execution_providers = decode_execution_providers([roop.globals.CFG.provider])
+    print(f'Using provider {roop.globals.execution_providers} - Device:{util.get_device()}')    
+    #set_execution_provider(roop.globals.CFG.provider)
+    #print(f'Available providers {roop.globals.execution_providers}, using {roop.globals.execution_providers[0]} - Device:{util.get_device()}')
     
     run_server = True
     mycss = """
